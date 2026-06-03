@@ -28,6 +28,22 @@ export type TipoDespesa = {
   updated_at: string;
 };
 
+export type DiaFesta = {
+  id: string;
+  data: string;
+  nome: string;
+  fechado: boolean;
+  fechado_por_id: string | null;
+  fechado_por_nome: string | null;
+  fechado_at: string | null;
+  criado_por_id: string | null;
+  criado_por_nome: string | null;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type RegistoRow = {
   id: string;
   posto_id: string;
@@ -206,6 +222,26 @@ export type Database = {
         Update: Partial<TipoDespesa>;
         Relationships: [];
       };
+      dias_festa: {
+        Row: DiaFesta;
+        Insert: {
+          id?: string;
+          data: string;
+          nome: string;
+          fechado?: boolean;
+          fechado_por_id?: string | null;
+          fechado_por_nome?: string | null;
+          fechado_at?: string | null;
+          criado_por_id?: string | null;
+          criado_por_nome?: string | null;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<DiaFesta>;
+        Relationships: [];
+      };
       registos_faturacao: {
         Row: RegistoRow;
         Insert: {
@@ -301,6 +337,10 @@ export type Database = {
         Args: { p_token: string; p_id: string };
         Returns: null;
       };
+      app_apagar_dia: {
+        Args: { p_token: string; p_id: string; p_password: string };
+        Returns: null;
+      };
       app_apagar_posto: {
         Args: { p_token: string; p_id: string };
         Returns: null;
@@ -327,6 +367,14 @@ export type Database = {
           p_observacoes?: string | null;
         };
         Returns: string;
+      };
+      app_guardar_dia: {
+        Args: {
+          p_token: string;
+          p_data: string;
+          p_nome?: string | null;
+        };
+        Returns: DiaFesta[];
       };
       app_guardar_posto: {
         Args: {
@@ -378,6 +426,14 @@ export type Database = {
       app_listar_despesas: {
         Args: { p_token: string; p_data: string };
         Returns: DespesaRpc[];
+      };
+      app_fechar_dia: {
+        Args: { p_token: string; p_id: string };
+        Returns: DiaFesta[];
+      };
+      app_listar_dias: {
+        Args: { p_token: string };
+        Returns: DiaFesta[];
       };
       app_listar_tipos_despesa: {
         Args: { p_token: string };

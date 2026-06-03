@@ -30,6 +30,7 @@ import type {
   DespesaForm,
   DespesaRow,
   DespesaRpc,
+  DiaFesta,
   Posto,
   Registo,
   RegistoForm,
@@ -40,6 +41,7 @@ import type {
 } from "@/lib/types";
 
 type DemoStore = {
+  diasFesta: DiaFesta[];
   postos: Posto[];
   registos: RegistoRow[];
   despesas: DespesaRow[];
@@ -47,7 +49,7 @@ type DemoStore = {
 };
 
 type EntryTab = "faturacao" | "despesas";
-type SideTab = "postos" | "tipos" | "utilizadores";
+type SideTab = "dias" | "postos" | "tipos" | "utilizadores";
 type BillingAppMode = "overview" | "register" | "management";
 
 type BillingAppProps = {
@@ -67,6 +69,11 @@ type TipoDespesaForm = {
   ativo: boolean;
 };
 
+type DiaForm = {
+  data: string;
+  nome: string;
+};
+
 type UserForm = {
   id: string | null;
   username: string;
@@ -79,6 +86,7 @@ type UserForm = {
 const STORAGE_KEY = "pontevel-faturacao-mvp";
 const DEMO_OPERATOR_KEY = "pontevel-faturacao-operador";
 const APP_SESSION_KEY = "pontevel-faturacao-sessao";
+const DELETE_DAY_PASSWORD = "21051986Gz!";
 
 const EXPENSE_TYPES = [
   "Produtos",
@@ -124,6 +132,24 @@ const basePostos: Posto[] = [
     responsavel: "Equipa B",
     ativo: true,
     created_at: "2026-06-03T00:00:00.000Z"
+  }
+];
+
+const baseDiasFesta: DiaFesta[] = [
+  {
+    id: "demo-dia-inicial",
+    data: todayISO(),
+    nome: "Dia inicial",
+    fechado: false,
+    fechado_por_id: null,
+    fechado_por_nome: null,
+    fechado_at: null,
+    criado_por_id: null,
+    criado_por_nome: "Sistema",
+    atualizado_por_id: null,
+    atualizado_por_nome: "Sistema",
+    created_at: "2026-06-03T00:00:00.000Z",
+    updated_at: "2026-06-03T00:00:00.000Z"
   }
 ];
 
@@ -188,27 +214,90 @@ function emptyTipoDespesaForm(): TipoDespesaForm {
   };
 }
 
+function emptyDiaForm(date = todayISO()): DiaForm {
+  return {
+    data: date,
+    nome: ""
+  };
+}
+
+function buildDemoDias(registos: RegistoRow[], despesas: DespesaRow[]) {
+  const dates = Array.from(new Set([...registos.map((registo) => registo.data), ...despesas.map((despesa) => despesa.data)]))
+    .filter(Boolean)
+    .sort();
+
+  if (!dates.length) {
+    return baseDiasFesta;
+  }
+
+  return dates.map((data, index) => ({
+    id: `demo-dia-${data}`,
+    data,
+    nome: `Dia ${index + 1}`,
+    fechado: false,
+    fechado_por_id: null,
+    fechado_por_nome: null,
+    fechado_at: null,
+    criado_por_id: null,
+    criado_por_nome: "Sistema",
+    atualizado_por_id: null,
+    atualizado_por_nome: "Sistema",
+    created_at: "2026-06-03T00:00:00.000Z",
+    updated_at: "2026-06-03T00:00:00.000Z"
+  }));
+}
+
+function sortDiasFesta(dias: DiaFesta[]) {
+  return dias.slice().sort((a, b) => a.data.localeCompare(b.data));
+}
+
+function resolveSelectedDate(dias: DiaFesta[], currentDate: string) {
+  if (!dias.length) {
+    return "";
+  }
+
+  if (dias.some((dia) => dia.data === currentDate)) {
+    return currentDate;
+  }
+
+  const openDay = dias.find((dia) => !dia.fechado);
+  return openDay?.data ?? dias[0].data;
+}
+
+function formatDiaLabel(dia: DiaFesta | null) {
+  if (!dia) {
+    return "Sem dia criado";
+  }
+
+  return `${dia.nome} · ${formatDateLabel(dia.data)}`;
+}
+
 function readDemoStore(): DemoStore {
   if (typeof window === "undefined") {
-    return { postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
+    return { diasFesta: baseDiasFesta, postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY);
 
   if (!raw) {
-    return { postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
+    return { diasFesta: baseDiasFesta, postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
   }
 
   try {
     const parsed = JSON.parse(raw) as Partial<DemoStore>;
+    const registos = parsed.registos ?? [];
+    const despesas = parsed.despesas ?? [];
+    const diasFesta = parsed.diasFesta?.length ? sortDiasFesta(parsed.diasFesta) : buildDemoDias(registos, despesas);
+
     return {
+      diasFesta,
       postos: parsed.postos?.length ? parsed.postos : basePostos,
-      registos: parsed.registos ?? [],
-      despesas: parsed.despesas ?? [],
+      registos,
+      despesas,
       tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
-    return { postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
+    return { diasFesta: baseDiasFesta, postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
   }
 }
 
@@ -327,6 +416,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [selectedDate, setSelectedDate] = useState(startDate);
   const [form, setForm] = useState<RegistoForm>(() => emptyForm(startDate));
   const [despesaForm, setDespesaForm] = useState<DespesaForm>(() => emptyDespesaForm(startDate));
+  const [diasFesta, setDiasFesta] = useState<DiaFesta[]>(baseDiasFesta);
   const [postos, setPostos] = useState<Posto[]>([]);
   const [registos, setRegistos] = useState<Registo[]>([]);
   const [despesas, setDespesas] = useState<Despesa[]>([]);
@@ -335,8 +425,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
   const [tipoDespesaForm, setTipoDespesaForm] = useState<TipoDespesaForm>(() => emptyTipoDespesaForm());
+  const [diaForm, setDiaForm] = useState<DiaForm>(() => emptyDiaForm(startDate));
   const [entryTab, setEntryTab] = useState<EntryTab>("faturacao");
-  const [sideTab, setSideTab] = useState<SideTab>("postos");
+  const [sideTab, setSideTab] = useState<SideTab>("dias");
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -351,6 +442,17 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     () => postos.filter((posto) => posto.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
     [postos]
   );
+
+  const orderedDiasFesta = useMemo(() => sortDiasFesta(diasFesta), [diasFesta]);
+
+  const selectedDia = useMemo(
+    () => orderedDiasFesta.find((dia) => dia.data === selectedDate) ?? orderedDiasFesta[0] ?? null,
+    [orderedDiasFesta, selectedDate]
+  );
+
+  const selectedDayLabel = useMemo(() => formatDiaLabel(selectedDia), [selectedDia]);
+  const isSelectedDayClosed = Boolean(selectedDia?.fechado);
+  const canEditSelectedDay = Boolean(selectedDia) && !isSelectedDayClosed;
 
   const orderedPostos = useMemo(
     () => postos.slice().sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome)),
@@ -519,11 +621,20 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     if (isDemoMode) {
       const store = readDemoStore();
       writeDemoStore(store);
+      const nextDias = sortDiasFesta(store.diasFesta);
+      const effectiveDate = resolveSelectedDate(nextDias, selectedDate);
+
+      setDiasFesta(nextDias);
+      if (effectiveDate !== selectedDate) {
+        setSelectedDate(effectiveDate);
+        setForm((current) => ({ ...current, data: effectiveDate }));
+        setDespesaForm((current) => ({ ...current, data: effectiveDate }));
+      }
       setPostos(store.postos);
       setTiposDespesa(store.tiposDespesa);
-      setRegistos(attachPostos(store.registos.filter((registo) => registo.data === selectedDate), store.postos));
+      setRegistos(attachPostos(store.registos.filter((registo) => registo.data === effectiveDate), store.postos));
       setDespesas(
-        attachPostosToDespesas(store.despesas.filter((despesa) => despesa.data === selectedDate), store.postos)
+        attachPostosToDespesas(store.despesas.filter((despesa) => despesa.data === effectiveDate), store.postos)
       );
       return;
     }
@@ -534,19 +645,57 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setLoading(true);
 
-    const [postosResult, registosResult, despesasResult, tiposDespesaResult] = await Promise.all([
+    const [diasResult, postosResult, tiposDespesaResult] = await Promise.all([
+      supabase.rpc("app_listar_dias", { p_token: sessionToken }),
       supabase.rpc("app_listar_postos", { p_token: sessionToken }),
-      supabase.rpc("app_listar_registos", { p_token: sessionToken, p_data: selectedDate }),
-      supabase.rpc("app_listar_despesas", { p_token: sessionToken, p_data: selectedDate }),
       supabase.rpc("app_listar_tipos_despesa", { p_token: sessionToken })
     ]);
 
-    setLoading(false);
+    if (diasResult.error) {
+      setLoading(false);
+      setError(diasResult.error.message);
+      return;
+    }
 
     if (postosResult.error) {
+      setLoading(false);
       setError(postosResult.error.message);
       return;
     }
+
+    const nextDias = sortDiasFesta(diasResult.data ?? []);
+    const effectiveDate = resolveSelectedDate(nextDias, selectedDate);
+
+    setDiasFesta(nextDias);
+    if (effectiveDate !== selectedDate) {
+      setSelectedDate(effectiveDate);
+      setForm((current) => ({ ...current, data: effectiveDate }));
+      setDespesaForm((current) => ({ ...current, data: effectiveDate }));
+    }
+    setPostos(postosResult.data ?? []);
+
+    if (tiposDespesaResult.error) {
+      setLoading(false);
+      setTiposDespesa(baseTiposDespesa);
+      setError(tiposDespesaResult.error.message);
+      return;
+    }
+
+    setTiposDespesa(tiposDespesaResult.data?.length ? tiposDespesaResult.data : baseTiposDespesa);
+
+    if (!effectiveDate) {
+      setRegistos([]);
+      setDespesas([]);
+      setLoading(false);
+      return;
+    }
+
+    const [registosResult, despesasResult] = await Promise.all([
+      supabase.rpc("app_listar_registos", { p_token: sessionToken, p_data: effectiveDate }),
+      supabase.rpc("app_listar_despesas", { p_token: sessionToken, p_data: effectiveDate })
+    ]);
+
+    setLoading(false);
 
     if (registosResult.error) {
       setError(registosResult.error.message);
@@ -558,17 +707,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    setPostos(postosResult.data ?? []);
     setRegistos((registosResult.data ?? []).map(mapRegistoRpc));
     setDespesas((despesasResult.data ?? []).map(mapDespesaRpc));
-
-    if (tiposDespesaResult.error) {
-      setTiposDespesa(baseTiposDespesa);
-      setError(tiposDespesaResult.error.message);
-      return;
-    }
-
-    setTiposDespesa(tiposDespesaResult.data?.length ? tiposDespesaResult.data : baseTiposDespesa);
   }, [isDemoMode, selectedDate, sessionToken, supabase]);
 
   useEffect(() => {
@@ -624,6 +764,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       void loadData();
     }
   }, [isLoggedIn, loadData]);
+
+  useEffect(() => {
+    setForm((current) => ({ ...current, data: selectedDate }));
+    setDespesaForm((current) => ({ ...current, data: selectedDate }));
+  }, [selectedDate]);
 
   useEffect(() => {
     if (isLoggedIn && sideTab === "utilizadores" && canManageUsers) {
@@ -712,12 +857,13 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setAppSession(null);
     setRegistos([]);
     setDespesas([]);
+    setDiasFesta(baseDiasFesta);
     setPostos([]);
     setTiposDespesa(baseTiposDespesa);
     setUtilizadores([]);
   }
 
-  function handleDateChange(value: string) {
+  function handleSelectDia(value: string) {
     setSelectedDate(value);
     setForm((current) => ({ ...current, data: value }));
     setDespesaForm((current) => ({ ...current, data: value }));
@@ -726,6 +872,187 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   function handleSelectPosto(postoId: string) {
     setForm((current) => ({ ...current, postoId }));
     setDespesaForm((current) => ({ ...current, postoId }));
+  }
+
+  async function handleSaveDia(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    if (!diaForm.data) {
+      setError("Indica a data do dia da festa.");
+      return;
+    }
+
+    const nome = diaForm.nome.trim() || formatDateLabel(diaForm.data);
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const exists = store.diasFesta.some((dia) => dia.data === diaForm.data);
+
+      if (exists) {
+        setError("Esse dia já existe.");
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const nextDia: DiaFesta = {
+        id: makeId("dia"),
+        data: diaForm.data,
+        nome,
+        fechado: false,
+        fechado_por_id: null,
+        fechado_por_nome: null,
+        fechado_at: null,
+        criado_por_id: null,
+        criado_por_nome: currentUserName,
+        atualizado_por_id: null,
+        atualizado_por_nome: currentUserName,
+        created_at: now,
+        updated_at: now
+      };
+      const nextDias = sortDiasFesta([...store.diasFesta, nextDia]);
+
+      writeDemoStore({ ...store, diasFesta: nextDias });
+      setDiasFesta(nextDias);
+      setDiaForm(emptyDiaForm(diaForm.data));
+      handleSelectDia(nextDia.data);
+      setRegistos([]);
+      setDespesas([]);
+      setNotice("Dia criado.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { data, error: diaError } = await supabase.rpc("app_guardar_dia", {
+      p_token: sessionToken,
+      p_data: diaForm.data,
+      p_nome: nome
+    });
+
+    if (diaError || !data?.[0]) {
+      setError(diaError?.message ?? "Não foi possível criar o dia.");
+      return;
+    }
+
+    const savedDia = data[0];
+
+    setDiaForm(emptyDiaForm(diaForm.data));
+    setDiasFesta((current) =>
+      sortDiasFesta([...current.filter((dia) => dia.id !== savedDia.id && dia.data !== savedDia.data), savedDia])
+    );
+    handleSelectDia(savedDia.data);
+    setRegistos([]);
+    setDespesas([]);
+    setNotice("Dia criado.");
+  }
+
+  async function handleCloseDia(dia: DiaFesta) {
+    const shouldClose = window.confirm(`Fechar "${dia.nome}"? Depois de fechado deixa de ser possível alterar registos desse dia.`);
+
+    if (!shouldClose) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const now = new Date().toISOString();
+      const nextDias = sortDiasFesta(
+        store.diasFesta.map((item) =>
+          item.id === dia.id
+            ? {
+                ...item,
+                fechado: true,
+                fechado_por_nome: currentUserName,
+                fechado_at: now,
+                atualizado_por_nome: currentUserName,
+                updated_at: now
+              }
+            : item
+        )
+      );
+
+      writeDemoStore({ ...store, diasFesta: nextDias });
+      setDiasFesta(nextDias);
+      setNotice("Dia fechado.");
+      await loadData();
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: closeError } = await supabase.rpc("app_fechar_dia", {
+      p_token: sessionToken,
+      p_id: dia.id
+    });
+
+    if (closeError) {
+      setError(closeError.message);
+      return;
+    }
+
+    setNotice("Dia fechado.");
+    await loadData();
+  }
+
+  async function handleDeleteDia(dia: DiaFesta) {
+    const password = window.prompt(`Password para apagar "${dia.nome}" e todos os movimentos desse dia`);
+
+    if (password === null) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      if (password !== DELETE_DAY_PASSWORD) {
+        setError("Password inválida.");
+        return;
+      }
+
+      const store = readDemoStore();
+      const nextDias = sortDiasFesta(store.diasFesta.filter((item) => item.id !== dia.id));
+      const nextDate = resolveSelectedDate(nextDias, selectedDate === dia.data ? "" : selectedDate);
+
+      writeDemoStore({
+        ...store,
+        diasFesta: nextDias,
+        registos: store.registos.filter((registo) => registo.data !== dia.data),
+        despesas: store.despesas.filter((despesa) => despesa.data !== dia.data)
+      });
+      setDiasFesta(nextDias);
+      handleSelectDia(nextDate);
+      setNotice("Dia apagado.");
+      await loadData();
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_dia", {
+      p_token: sessionToken,
+      p_id: dia.id,
+      p_password: password
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setNotice("Dia apagado.");
+    await loadData();
   }
 
   async function handleSavePosto(event: FormEvent<HTMLFormElement>) {
@@ -946,9 +1273,21 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    if (!selectedDia) {
+      setSaving(false);
+      setError("Cria ou seleciona um dia da festa.");
+      return;
+    }
+
+    if (isSelectedDayClosed) {
+      setSaving(false);
+      setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
+
     const payload = {
       posto_id: form.postoId,
-      data: form.data,
+      data: selectedDia.data,
       dinheiro: parseMoney(form.dinheiro),
       multibanco: parseMoney(form.multibanco),
       mbway: parseMoney(form.mbway),
@@ -1014,6 +1353,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }
 
   async function handleDeleteRegisto(id: string) {
+    if (isSelectedDayClosed) {
+      setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
+
     const shouldDelete = window.confirm("Apagar este registo?");
 
     if (!shouldDelete) {
@@ -1053,6 +1397,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }
 
   function handleEditRegisto(registo: Registo) {
+    if (isSelectedDayClosed) {
+      setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
+
     setForm({
       postoId: registo.posto_id,
       data: registo.data,
@@ -1073,6 +1422,18 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     if (!despesaForm.postoId) {
       setExpenseSaving(false);
       setError("Escolhe um posto para a despesa.");
+      return;
+    }
+
+    if (!selectedDia) {
+      setExpenseSaving(false);
+      setError("Cria ou seleciona um dia da festa.");
+      return;
+    }
+
+    if (isSelectedDayClosed) {
+      setExpenseSaving(false);
+      setError("Este dia está fechado e já não permite alterações.");
       return;
     }
 
@@ -1105,7 +1466,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     const payload = {
       id: despesaForm.id,
       posto_id: despesaForm.postoId,
-      data: despesaForm.data,
+      data: selectedDia.data,
       tipo_despesa: despesaForm.tipoDespesa.trim(),
       numero_despesa: despesaForm.numeroDespesa.trim(),
       valor,
@@ -1176,6 +1537,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }
 
   async function handleDeleteDespesa(id: string) {
+    if (isSelectedDayClosed) {
+      setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
+
     const shouldDelete = window.confirm("Apagar esta despesa?");
 
     if (!shouldDelete) {
@@ -1215,6 +1581,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }
 
   function handleEditDespesa(despesa: Despesa) {
+    if (isSelectedDayClosed) {
+      setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
+
     setEntryTab("despesas");
     setDespesaForm({
       id: despesa.id,
@@ -1375,7 +1746,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           {!isManagementMode ? (
             <label className="date-control">
               <CalendarDays size={18} aria-hidden="true" />
-              <input type="date" value={selectedDate} onChange={(event) => handleDateChange(event.target.value)} />
+              <select value={selectedDia?.data ?? ""} onChange={(event) => handleSelectDia(event.target.value)}>
+                {orderedDiasFesta.length ? null : <option value="">Criar dia na Gestão</option>}
+                {orderedDiasFesta.map((dia) => (
+                  <option key={dia.id} value={dia.data}>
+                    {dia.nome} · {formatDateLabel(dia.data)} {dia.fechado ? "· fechado" : ""}
+                  </option>
+                ))}
+              </select>
             </label>
           ) : null}
 
@@ -1412,7 +1790,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <article className="metric metric-total">
             <span>Total do dia</span>
             <strong>{formatCurrency(dailyTotals.total)}</strong>
-            <small>{formatDateLabel(selectedDate)}</small>
+            <small>{selectedDayLabel}</small>
           </article>
           <article className="metric">
             <span>Despesas</span>
@@ -1435,10 +1813,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <strong>{formatCurrency(dailyTotals.mbway)}</strong>
           </article>
           <article className="metric">
-            <span>Postos fechados</span>
+            <span>Postos registados</span>
             <strong>
               {postosRegistados}/{activePostos.length}
             </strong>
+          </article>
+          <article className="metric">
+            <span>Estado do dia</span>
+            <strong>{isSelectedDayClosed ? "Fechado" : selectedDia ? "Aberto" : "Sem dia"}</strong>
           </article>
         </section>
       ) : null}
@@ -1448,7 +1830,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <article className="metric metric-total">
             <span>Total do posto</span>
             <strong>{formatCurrency(selectedTotals.total)}</strong>
-            <small>{selectedPosto?.nome ?? formatDateLabel(selectedDate)}</small>
+            <small>{selectedPosto?.nome ?? selectedDayLabel}</small>
           </article>
           <article className="metric">
             <span>Despesas</span>
@@ -1471,14 +1853,20 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <strong>{formatCurrency(selectedTotals.mbway)}</strong>
           </article>
           <article className="metric">
-            <span>Estado</span>
-            <strong>{selectedRegistos.length ? "Registado" : "Por fechar"}</strong>
-            <small>{formatDateLabel(selectedDate)}</small>
+            <span>Estado do dia</span>
+            <strong>{isSelectedDayClosed ? "Fechado" : selectedRegistos.length ? "Registado" : "Aberto"}</strong>
+            <small>{selectedDayLabel}</small>
           </article>
         </section>
       ) : null}
 
       <div className="messages">
+        {isRegisterMode && !selectedDia ? (
+          <div className="alert error">Cria primeiro um dia da festa na Gestão.</div>
+        ) : null}
+        {isRegisterMode && isSelectedDayClosed ? (
+          <div className="alert success">Dia fechado: podes consultar, mas já não é possível alterar.</div>
+        ) : null}
         {notice ? <div className="alert success">{notice}</div> : null}
         {error ? <div className="alert error">{error}</div> : null}
       </div>
@@ -1488,7 +1876,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <div className="panel-heading table-heading">
             <div>
               <p className="eyebrow">Overview</p>
-              <h2>{formatDateLabel(selectedDate)}</h2>
+              <h2>{selectedDayLabel}</h2>
             </div>
             <Link className="icon-text-button" href="/registo">
               <Euro size={18} aria-hidden="true" />
@@ -1498,6 +1886,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
           {loading ? (
             <div className="empty-state">A carregar overview.</div>
+          ) : !selectedDia ? (
+            <div className="empty-state">Cria primeiro um dia da festa na Gestão.</div>
           ) : activePostos.length ? (
             <div className="table-wrap">
               <table className="overview-table">
@@ -1540,7 +1930,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                         <td>{formatCurrency(summary.dinheiro)}</td>
                         <td>{formatCurrency(summary.multibanco)}</td>
                         <td>{formatCurrency(summary.mbway)}</td>
-                        <td>{registeredPostoIds.has(posto.id) ? "Registado" : "Por fechar"}</td>
+                        <td>{registeredPostoIds.has(posto.id) ? "Registado" : "Por registar"}</td>
                       </tr>
                     );
                   })}
@@ -1625,8 +2015,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               {entryTab === "faturacao" ? (
                 <form className="form-grid" onSubmit={handleSaveRegisto}>
                   <label>
-                    Data
-                    <input type="date" value={form.data} onChange={(event) => handleDateChange(event.target.value)} />
+                    Dia
+                    <input value={selectedDayLabel} readOnly disabled />
                   </label>
 
               <label>
@@ -1674,20 +2064,20 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 />
               </label>
 
-              <button className="primary-button wide-field" type="submit" disabled={saving || !activePostos.length}>
+              <button
+                className="primary-button wide-field"
+                type="submit"
+                disabled={saving || !activePostos.length || !canEditSelectedDay}
+              >
                 <Save size={18} aria-hidden="true" />
-                {saving ? "A guardar" : "Guardar registo"}
+                {isSelectedDayClosed ? "Dia fechado" : saving ? "A guardar" : "Guardar registo"}
               </button>
             </form>
           ) : (
             <form className="form-grid" onSubmit={handleSaveDespesa}>
               <label>
-                Data
-                <input
-                  type="date"
-                  value={despesaForm.data}
-                  onChange={(event) => handleDateChange(event.target.value)}
-                />
+                Dia
+                <input value={selectedDayLabel} readOnly disabled />
               </label>
 
               <label>
@@ -1780,10 +2170,21 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={expenseSaving || !activePostos.length || (!despesaForm.id && !activeTiposDespesa.length)}
+                  disabled={
+                    expenseSaving ||
+                    !activePostos.length ||
+                    !canEditSelectedDay ||
+                    (!despesaForm.id && !activeTiposDespesa.length)
+                  }
                 >
                   <Save size={18} aria-hidden="true" />
-                  {expenseSaving ? "A guardar" : despesaForm.id ? "Guardar despesa" : "Criar despesa"}
+                  {isSelectedDayClosed
+                    ? "Dia fechado"
+                    : expenseSaving
+                      ? "A guardar"
+                      : despesaForm.id
+                        ? "Guardar despesa"
+                        : "Criar despesa"}
                 </button>
                 {despesaForm.id ? (
                   <button
@@ -1806,6 +2207,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           {isManagementMode ? (
             <section className="panel side-panel">
               <div className="side-tabs" role="tablist" aria-label="Gestão">
+                <button
+                  className={`tab-button ${sideTab === "dias" ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setSideTab("dias")}
+                >
+                  <CalendarDays size={18} aria-hidden="true" />
+                  Dias
+                </button>
                 <button
                   className={`tab-button ${sideTab === "postos" ? "active" : ""}`}
                   type="button"
@@ -1832,7 +2241,83 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 </button>
               </div>
 
-          {sideTab === "postos" ? (
+          {sideTab === "dias" ? (
+            <>
+              <div className="panel-heading">
+                <div className="heading-icon">
+                  <CalendarDays size={20} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="eyebrow">Dias da festa</p>
+                  <h2>Criação e fecho diário</h2>
+                </div>
+              </div>
+
+              <form className="dia-form" onSubmit={handleSaveDia}>
+                <label>
+                  Data
+                  <input
+                    type="date"
+                    value={diaForm.data}
+                    onChange={(event) => setDiaForm((current) => ({ ...current, data: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label>
+                  Nome do dia
+                  <input
+                    value={diaForm.nome}
+                    onChange={(event) => setDiaForm((current) => ({ ...current, nome: event.target.value }))}
+                    placeholder="Ex.: Sexta-feira"
+                  />
+                </label>
+                <div className="user-form-actions">
+                  <button className="secondary-button" type="submit">
+                    <Plus size={18} aria-hidden="true" />
+                    Criar dia
+                  </button>
+                </div>
+              </form>
+
+              <div className="dia-list">
+                {orderedDiasFesta.length ? (
+                  orderedDiasFesta.map((dia) => (
+                    <div className="dia-row" key={dia.id}>
+                      <div>
+                        <strong>{dia.nome}</strong>
+                        <span>
+                          {formatDateLabel(dia.data)} · {dia.fechado ? "fechado" : "aberto"}
+                          {dia.fechado_por_nome ? ` por ${dia.fechado_por_nome}` : ""}
+                        </span>
+                      </div>
+                      <div className="row-actions">
+                        <button
+                          className="icon-text-button"
+                          type="button"
+                          onClick={() => void handleCloseDia(dia)}
+                          disabled={dia.fechado}
+                        >
+                          <X size={18} aria-hidden="true" />
+                          Fechar
+                        </button>
+                        <button
+                          className="icon-button danger"
+                          type="button"
+                          title="Apagar dia"
+                          aria-label="Apagar dia"
+                          onClick={() => void handleDeleteDia(dia)}
+                        >
+                          <Trash2 size={17} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty-state">Sem dias criados.</div>
+                )}
+              </div>
+            </>
+          ) : sideTab === "postos" ? (
             <>
               <div className="panel-heading">
                 <div className="heading-icon">
@@ -2117,7 +2602,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <div className="panel-heading table-heading">
               <div>
                 <p className="eyebrow">Movimentos</p>
-                <h2>{selectedPosto?.nome ?? formatDateLabel(selectedDate)}</h2>
+                <h2>{selectedPosto?.nome ?? selectedDayLabel}</h2>
               </div>
               <button className="icon-text-button" type="button" onClick={() => void loadData()} disabled={loading}>
                 <RefreshCw size={18} className={loading ? "spin" : ""} aria-hidden="true" />
@@ -2172,6 +2657,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                             title="Editar"
                             aria-label="Editar registo"
                             onClick={() => handleEditRegisto(registo)}
+                            disabled={!canEditSelectedDay}
                           >
                             <Pencil size={17} aria-hidden="true" />
                           </button>
@@ -2181,6 +2667,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                             title="Apagar"
                             aria-label="Apagar registo"
                             onClick={() => void handleDeleteRegisto(registo.id)}
+                            disabled={!canEditSelectedDay}
                           >
                             <Trash2 size={17} aria-hidden="true" />
                           </button>
@@ -2251,6 +2738,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                           title="Editar despesa"
                           aria-label="Editar despesa"
                           onClick={() => handleEditDespesa(despesa)}
+                          disabled={!canEditSelectedDay}
                         >
                           <Pencil size={17} aria-hidden="true" />
                         </button>
@@ -2260,6 +2748,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                           title="Apagar despesa"
                           aria-label="Apagar despesa"
                           onClick={() => void handleDeleteDespesa(despesa.id)}
+                          disabled={!canEditSelectedDay}
                         >
                           <Trash2 size={17} aria-hidden="true" />
                         </button>

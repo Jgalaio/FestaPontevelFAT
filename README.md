@@ -23,7 +23,7 @@ Sem variáveis Supabase, a app abre em modo de demonstração e guarda dados no 
 
 1. Criar um projeto no Supabase.
 2. Abrir `SQL Editor`.
-3. Executar o ficheiro `supabase/schema.sql`.
+3. Executar o ficheiro `supabase/schema.sql` e depois `supabase/add-dias-festa.sql`.
 4. Copiar `Project URL` e a `publishable key`.
 
 Depois preencher:
@@ -43,15 +43,17 @@ Se já tinhas corrido um schema anterior, executa no `SQL Editor` o ficheiro:
 
 ```bash
 supabase/add-login-username-password.sql
+supabase/add-dias-festa.sql
 ```
 
 Essa atualização cria:
 
 - `utilizadores`, com username, nome, password hash, ativo e papel
 - `utilizador_sessoes`, com tokens de sessão temporários
+- `dias_festa`, com criação, seleção, fecho e remoção protegida por password
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
-- funções RPC para login, faturação, postos e gestão de utilizadores
+- funções RPC para login, faturação, despesas, dias, postos e gestão de utilizadores
 
 Utilizadores iniciais:
 
@@ -82,11 +84,12 @@ git push -u origin main
 - `postos`: nome, responsável, estado ativo
 - `utilizadores`: username, nome, password hash, estado ativo, papel
 - `utilizador_sessoes`: sessões temporárias de login
+- `dias_festa`: dias selecionáveis da festa, com estado aberto/fechado
 - `registos_faturacao`: posto, data, dinheiro, multibanco, MB Way, observações, criado por, atualizado por
 - `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia
 
-Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor desse dia.
+Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor desse dia. Quando um dia é fechado, a base de dados bloqueia novas alterações de faturação e despesas para essa data.
 
 ## Próximos passos recomendados
 

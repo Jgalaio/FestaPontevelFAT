@@ -154,8 +154,9 @@ button:disabled {
   background: var(--surface-strong);
 }
 
-.date-control input {
-  width: 145px;
+.date-control input,
+.date-control select {
+  width: min(320px, 42vw);
   border: 0;
   color: var(--ink);
   background: transparent;
@@ -176,7 +177,7 @@ button:disabled {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: 1.5fr repeat(6, minmax(0, 1fr));
+  grid-template-columns: 1.5fr repeat(7, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -192,6 +193,7 @@ button:disabled {
 .metric span,
 .metric small,
 td span,
+.dia-row span,
 .posto-row span,
 .tipo-row span {
   color: var(--muted);
@@ -349,6 +351,7 @@ td span,
 }
 
 .auth-form,
+.dia-form,
 .posto-form,
 .tipo-form,
 .user-form {
@@ -356,11 +359,17 @@ td span,
   gap: 12px;
 }
 
+.dia-form {
+  grid-template-columns: 180px 1fr auto;
+  align-items: end;
+}
+
 .posto-form {
   grid-template-columns: 1fr 1fr auto;
   align-items: end;
 }
 
+.dia-form .user-form-actions,
 .posto-form .user-form-actions {
   grid-column: 1 / -1;
 }
@@ -498,6 +507,7 @@ input:disabled {
   background: var(--teal);
 }
 
+.dia-list,
 .posto-list,
 .tipo-list,
 .user-list {
@@ -506,6 +516,7 @@ input:disabled {
   margin-top: 16px;
 }
 
+.dia-row,
 .posto-row,
 .tipo-row,
 .user-row {
@@ -520,6 +531,7 @@ input:disabled {
   background: rgba(255, 255, 255, 0.52);
 }
 
+.dia-row > div:first-child,
 .posto-row > div:first-child,
 .tipo-row div,
 .user-row div,
@@ -664,6 +676,7 @@ td {
   }
 
   .posto-form,
+  .dia-form,
   .tipo-form,
   .user-form {
     grid-template-columns: 1fr;
@@ -693,7 +706,8 @@ td {
     width: 100%;
   }
 
-  .date-control input {
+  .date-control input,
+  .date-control select {
     flex: 1;
     width: auto;
   }
