@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Building2,
   CalendarDays,
   Euro,
+  Home,
   KeyRound,
   LogOut,
   Pencil,
@@ -13,6 +15,7 @@ import {
   Receipt,
   RefreshCw,
   Save,
+  Settings,
   Tags,
   Trash2,
   UserRound,
@@ -45,6 +48,11 @@ type DemoStore = {
 
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "postos" | "tipos" | "utilizadores";
+type BillingAppMode = "home" | "management";
+
+type BillingAppProps = {
+  mode?: BillingAppMode;
+};
 
 type PostoForm = {
   id: string | null;
@@ -304,9 +312,10 @@ function mapDespesaRpc(row: DespesaRpc): Despesa {
   };
 }
 
-export function BillingApp() {
+export function BillingApp({ mode = "home" }: BillingAppProps) {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const isDemoMode = !hasSupabaseConfig || !supabase;
+  const isManagementMode = mode === "management";
   const startDate = useMemo(() => todayISO(), []);
 
   const [appSession, setAppSession] = useState<AppSession | null>(null);
@@ -346,6 +355,21 @@ export function BillingApp() {
     [postos]
   );
 
+  const selectedPosto = useMemo(
+    () => activePostos.find((posto) => posto.id === form.postoId) ?? activePostos[0] ?? null,
+    [activePostos, form.postoId]
+  );
+
+  const selectedRegistos = useMemo(
+    () => (selectedPosto ? registos.filter((registo) => registo.posto_id === selectedPosto.id) : []),
+    [registos, selectedPosto]
+  );
+
+  const selectedDespesas = useMemo(
+    () => (selectedPosto ? despesas.filter((despesa) => despesa.posto_id === selectedPosto.id) : []),
+    [despesas, selectedPosto]
+  );
+
   const activeTiposDespesa = useMemo(
     () => tiposDespesa.filter((tipo) => tipo.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
     [tiposDespesa]
@@ -367,6 +391,10 @@ export function BillingApp() {
   const despesasTotal = useMemo(() => {
     return despesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
   }, [despesas]);
+
+  const selectedDespesasTotal = useMemo(() => {
+    return selectedDespesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
+  }, [selectedDespesas]);
 
   const saldoDia = totals.total - despesasTotal;
 
@@ -630,6 +658,11 @@ export function BillingApp() {
     setSelectedDate(value);
     setForm((current) => ({ ...current, data: value }));
     setDespesaForm((current) => ({ ...current, data: value }));
+  }
+
+  function handleSelectPosto(postoId: string) {
+    setForm((current) => ({ ...current, postoId }));
+    setDespesaForm((current) => ({ ...current, postoId }));
   }
 
   async function handleSavePosto(event: FormEvent<HTMLFormElement>) {
@@ -1272,14 +1305,27 @@ export function BillingApp() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Festa de Pontével</p>
-          <h1>Faturação diária</h1>
+          <h1>{isManagementMode ? "Gestão" : "Faturação diária"}</h1>
         </div>
 
         <div className="top-actions">
-          <label className="date-control">
-            <CalendarDays size={18} aria-hidden="true" />
-            <input type="date" value={selectedDate} onChange={(event) => handleDateChange(event.target.value)} />
-          </label>
+          {isManagementMode ? (
+            <Link className="icon-text-button" href="/">
+              <Home size={18} aria-hidden="true" />
+              Home
+            </Link>
+          ) : (
+            <>
+              <label className="date-control">
+                <CalendarDays size={18} aria-hidden="true" />
+                <input type="date" value={selectedDate} onChange={(event) => handleDateChange(event.target.value)} />
+              </label>
+              <Link className="icon-text-button" href="/gestao">
+                <Settings size={18} aria-hidden="true" />
+                Gestão
+              </Link>
+            </>
+          )}
 
           {isDemoMode ? <span className="status-chip">Demonstração</span> : null}
           <span className="status-chip">{currentUserName}</span>
@@ -1294,47 +1340,72 @@ export function BillingApp() {
         </div>
       </header>
 
-      <section className="summary-grid" aria-label="Totais do dia">
-        <article className="metric metric-total">
-          <span>Total do dia</span>
-          <strong>{formatCurrency(totals.total)}</strong>
-          <small>{formatDateLabel(selectedDate)}</small>
-        </article>
-        <article className="metric">
-          <span>Despesas</span>
-          <strong>{formatCurrency(despesasTotal)}</strong>
-        </article>
-        <article className="metric">
-          <span>Saldo</span>
-          <strong>{formatCurrency(saldoDia)}</strong>
-        </article>
-        <article className="metric">
-          <span>Dinheiro</span>
-          <strong>{formatCurrency(totals.dinheiro)}</strong>
-        </article>
-        <article className="metric">
-          <span>Multibanco</span>
-          <strong>{formatCurrency(totals.multibanco)}</strong>
-        </article>
-        <article className="metric">
-          <span>MB Way</span>
-          <strong>{formatCurrency(totals.mbway)}</strong>
-        </article>
-        <article className="metric">
-          <span>Postos fechados</span>
-          <strong>
-            {postosRegistados}/{activePostos.length}
-          </strong>
-        </article>
-      </section>
+      {!isManagementMode ? (
+        <section className="summary-grid" aria-label="Totais do dia">
+          <article className="metric metric-total">
+            <span>Total do dia</span>
+            <strong>{formatCurrency(totals.total)}</strong>
+            <small>{formatDateLabel(selectedDate)}</small>
+          </article>
+          <article className="metric">
+            <span>Despesas</span>
+            <strong>{formatCurrency(despesasTotal)}</strong>
+          </article>
+          <article className="metric">
+            <span>Saldo</span>
+            <strong>{formatCurrency(saldoDia)}</strong>
+          </article>
+          <article className="metric">
+            <span>Dinheiro</span>
+            <strong>{formatCurrency(totals.dinheiro)}</strong>
+          </article>
+          <article className="metric">
+            <span>Multibanco</span>
+            <strong>{formatCurrency(totals.multibanco)}</strong>
+          </article>
+          <article className="metric">
+            <span>MB Way</span>
+            <strong>{formatCurrency(totals.mbway)}</strong>
+          </article>
+          <article className="metric">
+            <span>Postos fechados</span>
+            <strong>
+              {postosRegistados}/{activePostos.length}
+            </strong>
+          </article>
+        </section>
+      ) : null}
 
       <div className="messages">
         {notice ? <div className="alert success">{notice}</div> : null}
         {error ? <div className="alert error">{error}</div> : null}
       </div>
 
-      <div className="workspace-grid">
-        <section className="panel entry-panel">
+      {!isManagementMode ? (
+        <section className="posto-folder" aria-label="Postos">
+          {activePostos.length ? (
+            <div className="posto-tabs" role="tablist" aria-label="Selecionar posto">
+              {activePostos.map((posto) => (
+                <button
+                  className={`posto-tab ${selectedPosto?.id === posto.id ? "active" : ""}`}
+                  type="button"
+                  key={posto.id}
+                  onClick={() => handleSelectPosto(posto.id)}
+                >
+                  <strong>{posto.nome}</strong>
+                  <span>{posto.responsavel || "Sem responsável"}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">Sem postos ativos.</div>
+          )}
+        </section>
+      ) : null}
+
+      <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
+        {!isManagementMode ? (
+          <section className="panel entry-panel">
           <div className="side-tabs entry-tabs" role="tablist" aria-label="Tipo de registo">
             <button
               className={`tab-button ${entryTab === "faturacao" ? "active" : ""}`}
@@ -1363,29 +1434,14 @@ export function BillingApp() {
               )}
             </div>
             <div>
-              <p className="eyebrow">Registo</p>
-              <h2>{entryTab === "faturacao" ? "Valores por posto" : "Despesas por posto"}</h2>
+              <p className="eyebrow">{selectedPosto?.nome ?? "Sem posto selecionado"}</p>
+              <h2>{entryTab === "faturacao" ? "Faturação" : "Despesas"}</h2>
+              {selectedPosto?.responsavel ? <span className="panel-subtitle">{selectedPosto.responsavel}</span> : null}
             </div>
           </div>
 
           {entryTab === "faturacao" ? (
             <form className="form-grid" onSubmit={handleSaveRegisto}>
-              <label>
-                Posto
-                <select
-                  value={form.postoId}
-                  onChange={(event) => setForm((current) => ({ ...current, postoId: event.target.value }))}
-                  required
-                >
-                  <option value="">Escolher posto</option>
-                  {activePostos.map((posto) => (
-                    <option key={posto.id} value={posto.id}>
-                      {posto.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               <label>
                 Data
                 <input type="date" value={form.data} onChange={(event) => handleDateChange(event.target.value)} />
@@ -1443,22 +1499,6 @@ export function BillingApp() {
             </form>
           ) : (
             <form className="form-grid" onSubmit={handleSaveDespesa}>
-              <label>
-                Posto
-                <select
-                  value={despesaForm.postoId}
-                  onChange={(event) => setDespesaForm((current) => ({ ...current, postoId: event.target.value }))}
-                  required
-                >
-                  <option value="">Escolher posto</option>
-                  {activePostos.map((posto) => (
-                    <option key={posto.id} value={posto.id}>
-                      {posto.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               <label>
                 Data
                 <input
@@ -1579,7 +1619,9 @@ export function BillingApp() {
             </form>
           )}
         </section>
+        ) : null}
 
+        {isManagementMode ? (
         <section className="panel side-panel">
           <div className="side-tabs" role="tablist" aria-label="Gestão">
             <button
@@ -1883,13 +1925,16 @@ export function BillingApp() {
             </>
           )}
         </section>
+        ) : null}
       </div>
 
+      {!isManagementMode ? (
+      <>
       <section className="panel">
         <div className="panel-heading table-heading">
           <div>
             <p className="eyebrow">Movimentos</p>
-            <h2>{formatDateLabel(selectedDate)}</h2>
+            <h2>{selectedPosto?.nome ?? formatDateLabel(selectedDate)}</h2>
           </div>
           <button className="icon-text-button" type="button" onClick={() => void loadData()} disabled={loading}>
             <RefreshCw size={18} className={loading ? "spin" : ""} aria-hidden="true" />
@@ -1899,7 +1944,7 @@ export function BillingApp() {
 
         {loading ? (
           <div className="empty-state">A carregar registos.</div>
-        ) : registos.length ? (
+        ) : selectedRegistos.length ? (
           <div className="table-wrap">
             <table>
               <thead>
@@ -1915,7 +1960,7 @@ export function BillingApp() {
                 </tr>
               </thead>
               <tbody>
-                {registos.map((registo) => {
+                {selectedRegistos.map((registo) => {
                   const total =
                     Number(registo.dinheiro) + Number(registo.multibanco) + Number(registo.mbway);
 
@@ -1965,7 +2010,7 @@ export function BillingApp() {
             </table>
           </div>
         ) : (
-          <div className="empty-state">Sem registos para este dia.</div>
+          <div className="empty-state">Sem registos para este posto neste dia.</div>
         )}
       </section>
 
@@ -1973,13 +2018,13 @@ export function BillingApp() {
         <div className="panel-heading table-heading">
           <div>
             <p className="eyebrow">Despesas</p>
-            <h2>{formatCurrency(despesasTotal)}</h2>
+            <h2>{formatCurrency(selectedDespesasTotal)}</h2>
           </div>
         </div>
 
         {loading ? (
           <div className="empty-state">A carregar despesas.</div>
-        ) : despesas.length ? (
+        ) : selectedDespesas.length ? (
           <div className="table-wrap">
             <table className="expenses-table">
               <thead>
@@ -1995,7 +2040,7 @@ export function BillingApp() {
                 </tr>
               </thead>
               <tbody>
-                {despesas.map((despesa) => (
+                {selectedDespesas.map((despesa) => (
                   <tr key={despesa.id}>
                     <td>
                       <strong>{despesa.postos?.nome ?? "Posto removido"}</strong>
@@ -2043,9 +2088,11 @@ export function BillingApp() {
             </table>
           </div>
         ) : (
-          <div className="empty-state">Sem despesas para este dia.</div>
+          <div className="empty-state">Sem despesas para este posto neste dia.</div>
         )}
       </section>
+      </>
+      ) : null}
     </main>
   );
 }
