@@ -13,6 +13,7 @@ import {
   Receipt,
   RefreshCw,
   Save,
+  Tags,
   Trash2,
   UserRound,
   Users,
@@ -32,6 +33,7 @@ import type {
   RegistoForm,
   RegistoRow,
   RegistoRpc,
+  TipoDespesa,
   Utilizador
 } from "@/lib/types";
 
@@ -39,10 +41,17 @@ type DemoStore = {
   postos: Posto[];
   registos: RegistoRow[];
   despesas: DespesaRow[];
+  tiposDespesa: TipoDespesa[];
 };
 
 type EntryTab = "faturacao" | "despesas";
-type SideTab = "postos" | "utilizadores";
+type SideTab = "postos" | "tipos" | "utilizadores";
+
+type TipoDespesaForm = {
+  id: string | null;
+  nome: string;
+  ativo: boolean;
+};
 
 type UserForm = {
   id: string | null;
@@ -67,6 +76,18 @@ const EXPENSE_TYPES = [
   "Limpeza",
   "Outros"
 ];
+
+const baseTiposDespesa: TipoDespesa[] = EXPENSE_TYPES.map((nome, index) => ({
+  id: `demo-tipo-despesa-${index + 1}`,
+  nome,
+  ativo: true,
+  criado_por_id: null,
+  criado_por_nome: "Sistema",
+  atualizado_por_id: null,
+  atualizado_por_nome: "Sistema",
+  created_at: "2026-06-03T00:00:00.000Z",
+  updated_at: "2026-06-03T00:00:00.000Z"
+}));
 
 const basePostos: Posto[] = [
   {
@@ -136,15 +157,23 @@ function emptyUserForm(): UserForm {
   };
 }
 
+function emptyTipoDespesaForm(): TipoDespesaForm {
+  return {
+    id: null,
+    nome: "",
+    ativo: true
+  };
+}
+
 function readDemoStore(): DemoStore {
   if (typeof window === "undefined") {
-    return { postos: basePostos, registos: [], despesas: [] };
+    return { postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY);
 
   if (!raw) {
-    return { postos: basePostos, registos: [], despesas: [] };
+    return { postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
   }
 
   try {
@@ -152,10 +181,11 @@ function readDemoStore(): DemoStore {
     return {
       postos: parsed.postos?.length ? parsed.postos : basePostos,
       registos: parsed.registos ?? [],
-      despesas: parsed.despesas ?? []
+      despesas: parsed.despesas ?? [],
+      tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
-    return { postos: basePostos, registos: [], despesas: [] };
+    return { postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
   }
 }
 
@@ -274,8 +304,10 @@ export function BillingApp() {
   const [postos, setPostos] = useState<Posto[]>([]);
   const [registos, setRegistos] = useState<Registo[]>([]);
   const [despesas, setDespesas] = useState<Despesa[]>([]);
+  const [tiposDespesa, setTiposDespesa] = useState<TipoDespesa[]>(baseTiposDespesa);
   const [utilizadores, setUtilizadores] = useState<Utilizador[]>([]);
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
+  const [tipoDespesaForm, setTipoDespesaForm] = useState<TipoDespesaForm>(() => emptyTipoDespesaForm());
   const [entryTab, setEntryTab] = useState<EntryTab>("faturacao");
   const [sideTab, setSideTab] = useState<SideTab>("postos");
   const [newPostoName, setNewPostoName] = useState("");
@@ -285,12 +317,18 @@ export function BillingApp() {
   const [saving, setSaving] = useState(false);
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
+  const [tipoDespesaSaving, setTipoDespesaSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
   const activePostos = useMemo(
     () => postos.filter((posto) => posto.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
     [postos]
+  );
+
+  const activeTiposDespesa = useMemo(
+    () => tiposDespesa.filter((tipo) => tipo.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
+    [tiposDespesa]
   );
 
   const totals = useMemo(() => {
@@ -371,6 +409,7 @@ export function BillingApp() {
       const store = readDemoStore();
       writeDemoStore(store);
       setPostos(store.postos);
+      setTiposDespesa(store.tiposDespesa);
       setRegistos(attachPostos(store.registos.filter((registo) => registo.data === selectedDate), store.postos));
       setDespesas(
         attachPostosToDespesas(store.despesas.filter((despesa) => despesa.data === selectedDate), store.postos)
@@ -384,10 +423,11 @@ export function BillingApp() {
 
     setLoading(true);
 
-    const [postosResult, registosResult, despesasResult] = await Promise.all([
+    const [postosResult, registosResult, despesasResult, tiposDespesaResult] = await Promise.all([
       supabase.rpc("app_listar_postos", { p_token: sessionToken }),
       supabase.rpc("app_listar_registos", { p_token: sessionToken, p_data: selectedDate }),
-      supabase.rpc("app_listar_despesas", { p_token: sessionToken, p_data: selectedDate })
+      supabase.rpc("app_listar_despesas", { p_token: sessionToken, p_data: selectedDate }),
+      supabase.rpc("app_listar_tipos_despesa", { p_token: sessionToken })
     ]);
 
     setLoading(false);
@@ -410,6 +450,14 @@ export function BillingApp() {
     setPostos(postosResult.data ?? []);
     setRegistos((registosResult.data ?? []).map(mapRegistoRpc));
     setDespesas((despesasResult.data ?? []).map(mapDespesaRpc));
+
+    if (tiposDespesaResult.error) {
+      setTiposDespesa(baseTiposDespesa);
+      setError(tiposDespesaResult.error.message);
+      return;
+    }
+
+    setTiposDespesa(tiposDespesaResult.data?.length ? tiposDespesaResult.data : baseTiposDespesa);
   }, [isDemoMode, selectedDate, sessionToken, supabase]);
 
   useEffect(() => {
@@ -491,6 +539,25 @@ export function BillingApp() {
     }
   }, [activePostos, despesaForm.postoId]);
 
+  useEffect(() => {
+    if (despesaForm.id) {
+      return;
+    }
+
+    if (!activeTiposDespesa.length && despesaForm.tipoDespesa) {
+      setDespesaForm((current) => ({ ...current, tipoDespesa: "" }));
+      return;
+    }
+
+    if (activeTiposDespesa[0]) {
+      const hasSelectedType = activeTiposDespesa.some((tipo) => tipo.nome === despesaForm.tipoDespesa);
+
+      if (!hasSelectedType) {
+        setDespesaForm((current) => ({ ...current, tipoDespesa: activeTiposDespesa[0].nome }));
+      }
+    }
+  }, [activeTiposDespesa, despesaForm.id, despesaForm.tipoDespesa]);
+
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -531,6 +598,7 @@ export function BillingApp() {
     setRegistos([]);
     setDespesas([]);
     setPostos([]);
+    setTiposDespesa(baseTiposDespesa);
     setUtilizadores([]);
   }
 
@@ -596,6 +664,91 @@ export function BillingApp() {
     setNewPostoResponsavel("");
     setNotice("Posto adicionado.");
     await loadData();
+  }
+
+  async function handleSaveTipoDespesa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const nome = tipoDespesaForm.nome.trim();
+
+    if (!nome) {
+      setError("Indica o nome do tipo de despesa.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const exists = store.tiposDespesa.some(
+        (tipo) => tipo.id !== tipoDespesaForm.id && tipo.nome.toLowerCase() === nome.toLowerCase()
+      );
+
+      if (exists) {
+        setError("Esse tipo de despesa já existe.");
+        return;
+      }
+
+      const existingIndex = tipoDespesaForm.id
+        ? store.tiposDespesa.findIndex((tipo) => tipo.id === tipoDespesaForm.id)
+        : -1;
+      const existingTipo = existingIndex >= 0 ? store.tiposDespesa[existingIndex] : null;
+      const now = new Date().toISOString();
+      const nextTipo: TipoDespesa = {
+        id: existingTipo?.id ?? makeId("tipo-despesa"),
+        nome,
+        ativo: tipoDespesaForm.ativo,
+        criado_por_id: existingTipo?.criado_por_id ?? null,
+        criado_por_nome: existingTipo?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: null,
+        atualizado_por_nome: currentUserName,
+        created_at: existingTipo?.created_at ?? now,
+        updated_at: now
+      };
+
+      const nextTipos =
+        existingIndex >= 0
+          ? store.tiposDespesa.map((tipo, index) => (index === existingIndex ? nextTipo : tipo))
+          : [...store.tiposDespesa, nextTipo];
+
+      writeDemoStore({ ...store, tiposDespesa: nextTipos });
+      setTiposDespesa(nextTipos);
+      setTipoDespesaForm(emptyTipoDespesaForm());
+      setNotice("Tipo de despesa guardado.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setTipoDespesaSaving(true);
+
+    const { error: tipoError } = await supabase.rpc("app_guardar_tipo_despesa", {
+      p_token: sessionToken,
+      p_id: tipoDespesaForm.id,
+      p_nome: nome,
+      p_ativo: tipoDespesaForm.ativo
+    });
+
+    setTipoDespesaSaving(false);
+
+    if (tipoError) {
+      setError(tipoError.message);
+      return;
+    }
+
+    setTipoDespesaForm(emptyTipoDespesaForm());
+    setNotice("Tipo de despesa guardado.");
+    await loadData();
+  }
+
+  function handleEditTipoDespesa(tipo: TipoDespesa) {
+    setTipoDespesaForm({
+      id: tipo.id,
+      nome: tipo.nome,
+      ativo: tipo.ativo
+    });
   }
 
   async function handleSaveRegisto(event: FormEvent<HTMLFormElement>) {
@@ -1237,9 +1390,15 @@ export function BillingApp() {
                   }
                   required
                 >
-                  {EXPENSE_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
+                  <option value="">Escolher tipo</option>
+                  {despesaForm.id &&
+                  despesaForm.tipoDespesa &&
+                  !activeTiposDespesa.some((tipo) => tipo.nome === despesaForm.tipoDespesa) ? (
+                    <option value={despesaForm.tipoDespesa}>{despesaForm.tipoDespesa}</option>
+                  ) : null}
+                  {activeTiposDespesa.map((tipo) => (
+                    <option key={tipo.id} value={tipo.nome}>
+                      {tipo.nome}
                     </option>
                   ))}
                 </select>
@@ -1309,7 +1468,11 @@ export function BillingApp() {
               </label>
 
               <div className="form-actions wide-field">
-                <button className="primary-button" type="submit" disabled={expenseSaving || !activePostos.length}>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={expenseSaving || !activePostos.length || (!despesaForm.id && !activeTiposDespesa.length)}
+                >
                   <Save size={18} aria-hidden="true" />
                   {expenseSaving ? "A guardar" : despesaForm.id ? "Guardar despesa" : "Criar despesa"}
                 </button>
@@ -1339,6 +1502,14 @@ export function BillingApp() {
             >
               <Building2 size={18} aria-hidden="true" />
               Postos
+            </button>
+            <button
+              className={`tab-button ${sideTab === "tipos" ? "active" : ""}`}
+              type="button"
+              onClick={() => setSideTab("tipos")}
+            >
+              <Tags size={18} aria-hidden="true" />
+              Tipos
             </button>
             <button
               className={`tab-button ${sideTab === "utilizadores" ? "active" : ""}`}
@@ -1395,6 +1566,84 @@ export function BillingApp() {
                     <WalletCards size={18} aria-hidden="true" />
                   </div>
                 ))}
+              </div>
+            </>
+          ) : sideTab === "tipos" ? (
+            <>
+              <div className="panel-heading">
+                <div className="heading-icon">
+                  <Tags size={20} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="eyebrow">Despesas</p>
+                  <h2>Tipos de despesa</h2>
+                </div>
+              </div>
+
+              <form className="tipo-form" onSubmit={handleSaveTipoDespesa}>
+                <label>
+                  Nome
+                  <input
+                    value={tipoDespesaForm.nome}
+                    onChange={(event) =>
+                      setTipoDespesaForm((current) => ({ ...current, nome: event.target.value }))
+                    }
+                    placeholder="Ex.: Alimentação"
+                    required
+                  />
+                </label>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={tipoDespesaForm.ativo}
+                    onChange={(event) =>
+                      setTipoDespesaForm((current) => ({ ...current, ativo: event.target.checked }))
+                    }
+                  />
+                  Ativo
+                </label>
+                <div className="user-form-actions">
+                  <button className="secondary-button" type="submit" disabled={tipoDespesaSaving}>
+                    <Save size={18} aria-hidden="true" />
+                    {tipoDespesaSaving ? "A guardar" : tipoDespesaForm.id ? "Guardar" : "Criar"}
+                  </button>
+                  {tipoDespesaForm.id ? (
+                    <button
+                      className="icon-text-button"
+                      type="button"
+                      onClick={() => setTipoDespesaForm(emptyTipoDespesaForm())}
+                    >
+                      <X size={18} aria-hidden="true" />
+                      Cancelar
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+
+              <div className="tipo-list">
+                {tiposDespesa
+                  .slice()
+                  .sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome))
+                  .map((tipo) => (
+                    <div className="tipo-row" key={tipo.id}>
+                      <div>
+                        <strong>{tipo.nome}</strong>
+                        <span>
+                          {tipo.ativo ? "ativo" : "inativo"} · atualizado por{" "}
+                          {tipo.atualizado_por_nome ?? tipo.criado_por_nome ?? "Sistema"}
+                        </span>
+                      </div>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        title="Editar tipo de despesa"
+                        aria-label="Editar tipo de despesa"
+                        onClick={() => handleEditTipoDespesa(tipo)}
+                      >
+                        <Pencil size={17} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))}
               </div>
             </>
           ) : (

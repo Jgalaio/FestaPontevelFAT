@@ -160,7 +160,8 @@ button:disabled {
 .metric span,
 .metric small,
 td span,
-.posto-row span {
+.posto-row span,
+.tipo-row span {
   color: var(--muted);
 }
 
@@ -248,6 +249,7 @@ td span,
 
 .auth-form,
 .posto-form,
+.tipo-form,
 .user-form {
   display: grid;
   gap: 12px;
@@ -256,6 +258,15 @@ td span,
 .posto-form {
   grid-template-columns: 1fr 1fr auto;
   align-items: end;
+}
+
+.tipo-form {
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+
+.tipo-form .user-form-actions {
+  grid-column: 1 / -1;
 }
 
 label {
@@ -351,7 +362,7 @@ input:disabled {
 
 .side-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   gap: 6px;
   padding: 4px;
   margin-bottom: 18px;
@@ -383,6 +394,7 @@ input:disabled {
 }
 
 .posto-list,
+.tipo-list,
 .user-list {
   display: grid;
   gap: 10px;
@@ -390,6 +402,7 @@ input:disabled {
 }
 
 .posto-row,
+.tipo-row,
 .user-row {
   display: flex;
   align-items: center;
@@ -403,6 +416,7 @@ input:disabled {
 }
 
 .posto-row div,
+.tipo-row div,
 .user-row div,
 td:first-child {
   display: grid;
@@ -541,6 +555,7 @@ td {
   }
 
   .posto-form,
+  .tipo-form,
   .user-form {
     grid-template-columns: 1fr;
   }

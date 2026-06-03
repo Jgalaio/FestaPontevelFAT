@@ -16,6 +16,18 @@ export type Utilizador = {
   updated_at: string;
 };
 
+export type TipoDespesa = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  criado_por_id: string | null;
+  criado_por_nome: string | null;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type RegistoRow = {
   id: string;
   posto_id: string;
@@ -178,6 +190,22 @@ export type Database = {
         Update: Partial<Posto>;
         Relationships: [];
       };
+      tipos_despesa: {
+        Row: TipoDespesa;
+        Insert: {
+          id?: string;
+          nome: string;
+          ativo?: boolean;
+          criado_por_id?: string | null;
+          criado_por_nome?: string | null;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<TipoDespesa>;
+        Relationships: [];
+      };
       registos_faturacao: {
         Row: RegistoRow;
         Insert: {
@@ -296,6 +324,15 @@ export type Database = {
         };
         Returns: string;
       };
+      app_guardar_tipo_despesa: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_nome: string;
+          p_ativo?: boolean;
+        };
+        Returns: TipoDespesa[];
+      };
       app_guardar_registo: {
         Args: {
           p_token: string;
@@ -327,6 +364,10 @@ export type Database = {
       app_listar_despesas: {
         Args: { p_token: string; p_data: string };
         Returns: DespesaRpc[];
+      };
+      app_listar_tipos_despesa: {
+        Args: { p_token: string };
+        Returns: TipoDespesa[];
       };
       app_listar_registos: {
         Args: { p_token: string; p_data: string };
