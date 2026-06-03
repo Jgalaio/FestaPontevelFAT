@@ -340,9 +340,12 @@ export function BillingApp() {
       return;
     }
 
-    supabase
-      .rpc("app_utilizador_por_token", { p_token: storedSession.token })
-      .then(({ data, error: sessionError }) => {
+    async function validateStoredSession() {
+      try {
+        const { data, error: sessionError } = await supabase.rpc("app_utilizador_por_token", {
+          p_token: storedSession.token
+        });
+
         if (sessionError || !data?.[0]) {
           clearStoredSession();
           setAppSession(null);
@@ -360,8 +363,12 @@ export function BillingApp() {
 
         setAppSession(validatedSession);
         writeStoredSession(validatedSession);
-      })
-      .finally(() => setAuthLoading(false));
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    void validateStoredSession();
   }, [supabase]);
 
   useEffect(() => {
