@@ -46,6 +46,11 @@ button {
   cursor: pointer;
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
@@ -109,6 +114,33 @@ button:disabled {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.app-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 5px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.app-nav-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.app-nav-link.active {
+  color: #ffffff;
+  background: var(--teal);
 }
 
 .date-control {
@@ -549,6 +581,10 @@ table {
   min-width: 1100px;
 }
 
+.overview-table {
+  min-width: 1040px;
+}
+
 th,
 td {
   padding: 14px 12px;
@@ -669,6 +705,10 @@ td {
   }
 
   .side-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .app-nav {
     grid-template-columns: 1fr;
   }
 

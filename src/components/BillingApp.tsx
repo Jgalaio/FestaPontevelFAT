@@ -48,7 +48,7 @@ type DemoStore = {
 
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "postos" | "tipos" | "utilizadores";
-type BillingAppMode = "home" | "management";
+type BillingAppMode = "overview" | "register" | "management";
 
 type BillingAppProps = {
   mode?: BillingAppMode;
@@ -312,9 +312,11 @@ function mapDespesaRpc(row: DespesaRpc): Despesa {
   };
 }
 
-export function BillingApp({ mode = "home" }: BillingAppProps) {
+export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const isDemoMode = !hasSupabaseConfig || !supabase;
+  const isOverviewMode = mode === "overview";
+  const isRegisterMode = mode === "register";
   const isManagementMode = mode === "management";
   const startDate = useMemo(() => todayISO(), []);
 
@@ -371,16 +373,40 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
   );
 
   const postoFinancials = useMemo(() => {
-    const next = new Map<string, { despesas: number; faturacao: number }>();
+    const next = new Map<
+      string,
+      {
+        despesas: number;
+        dinheiro: number;
+        faturacao: number;
+        mbway: number;
+        multibanco: number;
+      }
+    >();
 
     for (const registo of registos) {
-      const current = next.get(registo.posto_id) ?? { despesas: 0, faturacao: 0 };
+      const current = next.get(registo.posto_id) ?? {
+        despesas: 0,
+        dinheiro: 0,
+        faturacao: 0,
+        mbway: 0,
+        multibanco: 0
+      };
+      current.dinheiro += Number(registo.dinheiro);
+      current.multibanco += Number(registo.multibanco);
+      current.mbway += Number(registo.mbway);
       current.faturacao += Number(registo.dinheiro) + Number(registo.multibanco) + Number(registo.mbway);
       next.set(registo.posto_id, current);
     }
 
     for (const despesa of despesas) {
-      const current = next.get(despesa.posto_id) ?? { despesas: 0, faturacao: 0 };
+      const current = next.get(despesa.posto_id) ?? {
+        despesas: 0,
+        dinheiro: 0,
+        faturacao: 0,
+        mbway: 0,
+        multibanco: 0
+      };
       current.despesas += Number(despesa.valor);
       next.set(despesa.posto_id, current);
     }
@@ -392,6 +418,19 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
     () => tiposDespesa.filter((tipo) => tipo.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
     [tiposDespesa]
   );
+
+  const dailyTotals = useMemo(() => {
+    return registos.reduce(
+      (acc, registo) => {
+        acc.dinheiro += Number(registo.dinheiro);
+        acc.multibanco += Number(registo.multibanco);
+        acc.mbway += Number(registo.mbway);
+        acc.total += Number(registo.dinheiro) + Number(registo.multibanco) + Number(registo.mbway);
+        return acc;
+      },
+      { dinheiro: 0, mbway: 0, multibanco: 0, total: 0 }
+    );
+  }, [registos]);
 
   const selectedTotals = useMemo(() => {
     return selectedRegistos.reduce(
@@ -410,6 +449,21 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
     return selectedDespesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
   }, [selectedDespesas]);
 
+  const dailyDespesasTotal = useMemo(() => {
+    return despesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
+  }, [despesas]);
+
+  const postosRegistados = useMemo(
+    () => new Set(registos.map((registo) => registo.posto_id)).size,
+    [registos]
+  );
+
+  const registeredPostoIds = useMemo(
+    () => new Set(registos.map((registo) => registo.posto_id)),
+    [registos]
+  );
+
+  const dailySaldo = dailyTotals.total - dailyDespesasTotal;
   const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
 
   const currentUserName = appSession?.nome ?? demoOperator;
@@ -1314,27 +1368,16 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
       <header className="topbar">
         <div>
           <p className="eyebrow">Festa de Pontével</p>
-          <h1>{isManagementMode ? "Gestão" : "Faturação diária"}</h1>
+          <h1>{isOverviewMode ? "Overview diário" : isRegisterMode ? "Registo diário" : "Gestão"}</h1>
         </div>
 
         <div className="top-actions">
-          {isManagementMode ? (
-            <Link className="icon-text-button" href="/">
-              <Home size={18} aria-hidden="true" />
-              Home
-            </Link>
-          ) : (
-            <>
-              <label className="date-control">
-                <CalendarDays size={18} aria-hidden="true" />
-                <input type="date" value={selectedDate} onChange={(event) => handleDateChange(event.target.value)} />
-              </label>
-              <Link className="icon-text-button" href="/gestao">
-                <Settings size={18} aria-hidden="true" />
-                Gestão
-              </Link>
-            </>
-          )}
+          {!isManagementMode ? (
+            <label className="date-control">
+              <CalendarDays size={18} aria-hidden="true" />
+              <input type="date" value={selectedDate} onChange={(event) => handleDateChange(event.target.value)} />
+            </label>
+          ) : null}
 
           {isDemoMode ? <span className="status-chip">Demonstração</span> : null}
           <span className="status-chip">{currentUserName}</span>
@@ -1349,7 +1392,58 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
         </div>
       </header>
 
-      {!isManagementMode ? (
+      <nav className="app-nav" aria-label="Navegação principal">
+        <Link className={`app-nav-link ${isOverviewMode ? "active" : ""}`} href="/">
+          <Home size={18} aria-hidden="true" />
+          Overview
+        </Link>
+        <Link className={`app-nav-link ${isRegisterMode ? "active" : ""}`} href="/registo">
+          <Euro size={18} aria-hidden="true" />
+          Registo
+        </Link>
+        <Link className={`app-nav-link ${isManagementMode ? "active" : ""}`} href="/gestao">
+          <Settings size={18} aria-hidden="true" />
+          Gestão
+        </Link>
+      </nav>
+
+      {isOverviewMode ? (
+        <section className="summary-grid" aria-label="Totais do dia">
+          <article className="metric metric-total">
+            <span>Total do dia</span>
+            <strong>{formatCurrency(dailyTotals.total)}</strong>
+            <small>{formatDateLabel(selectedDate)}</small>
+          </article>
+          <article className="metric">
+            <span>Despesas</span>
+            <strong>{formatCurrency(dailyDespesasTotal)}</strong>
+          </article>
+          <article className="metric">
+            <span>Saldo</span>
+            <strong>{formatCurrency(dailySaldo)}</strong>
+          </article>
+          <article className="metric">
+            <span>Dinheiro</span>
+            <strong>{formatCurrency(dailyTotals.dinheiro)}</strong>
+          </article>
+          <article className="metric">
+            <span>Multibanco</span>
+            <strong>{formatCurrency(dailyTotals.multibanco)}</strong>
+          </article>
+          <article className="metric">
+            <span>MB Way</span>
+            <strong>{formatCurrency(dailyTotals.mbway)}</strong>
+          </article>
+          <article className="metric">
+            <span>Postos fechados</span>
+            <strong>
+              {postosRegistados}/{activePostos.length}
+            </strong>
+          </article>
+        </section>
+      ) : null}
+
+      {isRegisterMode ? (
         <section className="summary-grid" aria-label="Totais do dia">
           <article className="metric metric-total">
             <span>Total do posto</span>
@@ -1389,7 +1483,77 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
         {error ? <div className="alert error">{error}</div> : null}
       </div>
 
-      {!isManagementMode ? (
+      {isOverviewMode ? (
+        <section className="panel">
+          <div className="panel-heading table-heading">
+            <div>
+              <p className="eyebrow">Overview</p>
+              <h2>{formatDateLabel(selectedDate)}</h2>
+            </div>
+            <Link className="icon-text-button" href="/registo">
+              <Euro size={18} aria-hidden="true" />
+              Registar
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="empty-state">A carregar overview.</div>
+          ) : activePostos.length ? (
+            <div className="table-wrap">
+              <table className="overview-table">
+                <thead>
+                  <tr>
+                    <th>Posto</th>
+                    <th>Faturação</th>
+                    <th>Despesas</th>
+                    <th>Saldo</th>
+                    <th>Dinheiro</th>
+                    <th>Multibanco</th>
+                    <th>MB Way</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activePostos.map((posto) => {
+                    const summary = postoFinancials.get(posto.id) ?? {
+                      despesas: 0,
+                      dinheiro: 0,
+                      faturacao: 0,
+                      mbway: 0,
+                      multibanco: 0
+                    };
+                    const saldo = summary.faturacao - summary.despesas;
+
+                    return (
+                      <tr key={posto.id}>
+                        <td>
+                          <strong>{posto.nome}</strong>
+                          <span>{posto.responsavel || "Sem responsável"}</span>
+                        </td>
+                        <td>
+                          <strong>{formatCurrency(summary.faturacao)}</strong>
+                        </td>
+                        <td>{formatCurrency(summary.despesas)}</td>
+                        <td>
+                          <strong>{formatCurrency(saldo)}</strong>
+                        </td>
+                        <td>{formatCurrency(summary.dinheiro)}</td>
+                        <td>{formatCurrency(summary.multibanco)}</td>
+                        <td>{formatCurrency(summary.mbway)}</td>
+                        <td>{registeredPostoIds.has(posto.id) ? "Registado" : "Por fechar"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">Sem postos ativos.</div>
+          )}
+        </section>
+      ) : null}
+
+      {isRegisterMode ? (
         <section className="posto-folder" aria-label="Postos">
           {activePostos.length ? (
             <div className="posto-tabs" role="tablist" aria-label="Selecionar posto">
@@ -1418,49 +1582,52 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
         </section>
       ) : null}
 
-      <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
-        {!isManagementMode ? (
-          <section className="panel entry-panel">
-          <div className="side-tabs entry-tabs" role="tablist" aria-label="Tipo de registo">
-            <button
-              className={`tab-button ${entryTab === "faturacao" ? "active" : ""}`}
-              type="button"
-              onClick={() => setEntryTab("faturacao")}
-            >
-              <Euro size={18} aria-hidden="true" />
-              Faturação
-            </button>
-            <button
-              className={`tab-button ${entryTab === "despesas" ? "active" : ""}`}
-              type="button"
-              onClick={() => setEntryTab("despesas")}
-            >
-              <Receipt size={18} aria-hidden="true" />
-              Despesas
-            </button>
-          </div>
+      {!isOverviewMode ? (
+        <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
+          {isRegisterMode ? (
+            <section className="panel entry-panel">
+              <div className="side-tabs entry-tabs" role="tablist" aria-label="Tipo de registo">
+                <button
+                  className={`tab-button ${entryTab === "faturacao" ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setEntryTab("faturacao")}
+                >
+                  <Euro size={18} aria-hidden="true" />
+                  Faturação
+                </button>
+                <button
+                  className={`tab-button ${entryTab === "despesas" ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setEntryTab("despesas")}
+                >
+                  <Receipt size={18} aria-hidden="true" />
+                  Despesas
+                </button>
+              </div>
 
-          <div className="panel-heading">
-            <div className="heading-icon">
+              <div className="panel-heading">
+                <div className="heading-icon">
+                  {entryTab === "faturacao" ? (
+                    <Euro size={20} aria-hidden="true" />
+                  ) : (
+                    <Receipt size={20} aria-hidden="true" />
+                  )}
+                </div>
+                <div>
+                  <p className="eyebrow">{selectedPosto?.nome ?? "Sem posto selecionado"}</p>
+                  <h2>{entryTab === "faturacao" ? "Faturação" : "Despesas"}</h2>
+                  {selectedPosto?.responsavel ? (
+                    <span className="panel-subtitle">{selectedPosto.responsavel}</span>
+                  ) : null}
+                </div>
+              </div>
+
               {entryTab === "faturacao" ? (
-                <Euro size={20} aria-hidden="true" />
-              ) : (
-                <Receipt size={20} aria-hidden="true" />
-              )}
-            </div>
-            <div>
-              <p className="eyebrow">{selectedPosto?.nome ?? "Sem posto selecionado"}</p>
-              <h2>{entryTab === "faturacao" ? "Faturação" : "Despesas"}</h2>
-              {selectedPosto?.responsavel ? <span className="panel-subtitle">{selectedPosto.responsavel}</span> : null}
-            </div>
-          </div>
-
-          {entryTab === "faturacao" ? (
-            <form className="form-grid" onSubmit={handleSaveRegisto}>
-              <label>
-                Data
-                <input type="date" value={form.data} onChange={(event) => handleDateChange(event.target.value)} />
-              </label>
+                <form className="form-grid" onSubmit={handleSaveRegisto}>
+                  <label>
+                    Data
+                    <input type="date" value={form.data} onChange={(event) => handleDateChange(event.target.value)} />
+                  </label>
 
               <label>
                 Dinheiro
@@ -1633,37 +1800,37 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
               </div>
             </form>
           )}
-        </section>
-        ) : null}
+            </section>
+          ) : null}
 
-        {isManagementMode ? (
-        <section className="panel side-panel">
-          <div className="side-tabs" role="tablist" aria-label="Gestão">
-            <button
-              className={`tab-button ${sideTab === "postos" ? "active" : ""}`}
-              type="button"
-              onClick={() => setSideTab("postos")}
-            >
-              <Building2 size={18} aria-hidden="true" />
-              Postos
-            </button>
-            <button
-              className={`tab-button ${sideTab === "tipos" ? "active" : ""}`}
-              type="button"
-              onClick={() => setSideTab("tipos")}
-            >
-              <Tags size={18} aria-hidden="true" />
-              Tipos
-            </button>
-            <button
-              className={`tab-button ${sideTab === "utilizadores" ? "active" : ""}`}
-              type="button"
-              onClick={() => setSideTab("utilizadores")}
-            >
-              <Users size={18} aria-hidden="true" />
-              Utilizadores
-            </button>
-          </div>
+          {isManagementMode ? (
+            <section className="panel side-panel">
+              <div className="side-tabs" role="tablist" aria-label="Gestão">
+                <button
+                  className={`tab-button ${sideTab === "postos" ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setSideTab("postos")}
+                >
+                  <Building2 size={18} aria-hidden="true" />
+                  Postos
+                </button>
+                <button
+                  className={`tab-button ${sideTab === "tipos" ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setSideTab("tipos")}
+                >
+                  <Tags size={18} aria-hidden="true" />
+                  Tipos
+                </button>
+                <button
+                  className={`tab-button ${sideTab === "utilizadores" ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setSideTab("utilizadores")}
+                >
+                  <Users size={18} aria-hidden="true" />
+                  Utilizadores
+                </button>
+              </div>
 
           {sideTab === "postos" ? (
             <>
@@ -1939,23 +2106,24 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
               </div>
             </>
           )}
-        </section>
-        ) : null}
-      </div>
-
-      {!isManagementMode ? (
-      <>
-      <section className="panel">
-        <div className="panel-heading table-heading">
-          <div>
-            <p className="eyebrow">Movimentos</p>
-            <h2>{selectedPosto?.nome ?? formatDateLabel(selectedDate)}</h2>
-          </div>
-          <button className="icon-text-button" type="button" onClick={() => void loadData()} disabled={loading}>
-            <RefreshCw size={18} className={loading ? "spin" : ""} aria-hidden="true" />
-            Atualizar
-          </button>
+            </section>
+          ) : null}
         </div>
+      ) : null}
+
+      {isRegisterMode ? (
+        <>
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Movimentos</p>
+                <h2>{selectedPosto?.nome ?? formatDateLabel(selectedDate)}</h2>
+              </div>
+              <button className="icon-text-button" type="button" onClick={() => void loadData()} disabled={loading}>
+                <RefreshCw size={18} className={loading ? "spin" : ""} aria-hidden="true" />
+                Atualizar
+              </button>
+            </div>
 
         {loading ? (
           <div className="empty-state">A carregar registos.</div>
@@ -2027,15 +2195,15 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
         ) : (
           <div className="empty-state">Sem registos para este posto neste dia.</div>
         )}
-      </section>
+          </section>
 
-      <section className="panel">
-        <div className="panel-heading table-heading">
-          <div>
-            <p className="eyebrow">Despesas</p>
-            <h2>{formatCurrency(selectedDespesasTotal)}</h2>
-          </div>
-        </div>
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Despesas</p>
+                <h2>{formatCurrency(selectedDespesasTotal)}</h2>
+              </div>
+            </div>
 
         {loading ? (
           <div className="empty-state">A carregar despesas.</div>
@@ -2105,8 +2273,8 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
         ) : (
           <div className="empty-state">Sem despesas para este posto neste dia.</div>
         )}
-      </section>
-      </>
+          </section>
+        </>
       ) : null}
     </main>
   );
