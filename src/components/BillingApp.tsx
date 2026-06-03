@@ -17,7 +17,6 @@ import {
   Trash2,
   UserRound,
   Users,
-  WalletCards,
   X
 } from "lucide-react";
 import { createBrowserSupabaseClient, hasSupabaseConfig } from "@/lib/supabase";
@@ -46,6 +45,13 @@ type DemoStore = {
 
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "postos" | "tipos" | "utilizadores";
+
+type PostoForm = {
+  id: string | null;
+  nome: string;
+  responsavel: string;
+  ativo: boolean;
+};
 
 type TipoDespesaForm = {
   id: string | null;
@@ -154,6 +160,15 @@ function emptyUserForm(): UserForm {
     password: "",
     ativo: true,
     role: "operador"
+  };
+}
+
+function emptyPostoForm(): PostoForm {
+  return {
+    id: null,
+    nome: "",
+    responsavel: "",
+    ativo: true
   };
 }
 
@@ -307,15 +322,15 @@ export function BillingApp() {
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesa[]>(baseTiposDespesa);
   const [utilizadores, setUtilizadores] = useState<Utilizador[]>([]);
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
+  const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
   const [tipoDespesaForm, setTipoDespesaForm] = useState<TipoDespesaForm>(() => emptyTipoDespesaForm());
   const [entryTab, setEntryTab] = useState<EntryTab>("faturacao");
   const [sideTab, setSideTab] = useState<SideTab>("postos");
-  const [newPostoName, setNewPostoName] = useState("");
-  const [newPostoResponsavel, setNewPostoResponsavel] = useState("");
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expenseSaving, setExpenseSaving] = useState(false);
+  const [postoSaving, setPostoSaving] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
   const [tipoDespesaSaving, setTipoDespesaSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -323,6 +338,11 @@ export function BillingApp() {
 
   const activePostos = useMemo(
     () => postos.filter((posto) => posto.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
+    [postos]
+  );
+
+  const orderedPostos = useMemo(
+    () => postos.slice().sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome)),
     [postos]
   );
 
@@ -528,13 +548,17 @@ export function BillingApp() {
   }, [canManageUsers]);
 
   useEffect(() => {
-    if (!form.postoId && activePostos[0]) {
+    const hasSelectedPosto = activePostos.some((posto) => posto.id === form.postoId);
+
+    if (!hasSelectedPosto && activePostos[0]) {
       setForm((current) => ({ ...current, postoId: activePostos[0].id }));
     }
   }, [activePostos, form.postoId]);
 
   useEffect(() => {
-    if (!despesaForm.postoId && activePostos[0]) {
+    const hasSelectedPosto = activePostos.some((posto) => posto.id === despesaForm.postoId);
+
+    if (!hasSelectedPosto && activePostos[0]) {
       setDespesaForm((current) => ({ ...current, postoId: activePostos[0].id }));
     }
   }, [activePostos, despesaForm.postoId]);
@@ -608,12 +632,12 @@ export function BillingApp() {
     setDespesaForm((current) => ({ ...current, data: value }));
   }
 
-  async function handleAddPosto(event: FormEvent<HTMLFormElement>) {
+  async function handleSavePosto(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setNotice("");
 
-    const nome = newPostoName.trim();
+    const nome = postoForm.nome.trim();
 
     if (!nome) {
       setError("Indica o nome do posto.");
@@ -622,25 +646,33 @@ export function BillingApp() {
 
     if (isDemoMode) {
       const store = readDemoStore();
-      const exists = store.postos.some((posto) => posto.nome.toLowerCase() === nome.toLowerCase());
+      const exists = store.postos.some(
+        (posto) => posto.id !== postoForm.id && posto.nome.toLowerCase() === nome.toLowerCase()
+      );
 
       if (exists) {
         setError("Esse posto já existe.");
         return;
       }
 
+      const existingIndex = postoForm.id ? store.postos.findIndex((posto) => posto.id === postoForm.id) : -1;
+      const existingPosto = existingIndex >= 0 ? store.postos[existingIndex] : null;
       const nextPosto: Posto = {
-        id: makeId("posto"),
+        id: existingPosto?.id ?? makeId("posto"),
         nome,
-        responsavel: newPostoResponsavel.trim() || null,
-        ativo: true,
-        created_at: new Date().toISOString()
+        responsavel: postoForm.responsavel.trim() || null,
+        ativo: postoForm.ativo,
+        created_at: existingPosto?.created_at ?? new Date().toISOString()
       };
 
-      writeDemoStore({ ...store, postos: [...store.postos, nextPosto] });
-      setNewPostoName("");
-      setNewPostoResponsavel("");
-      setNotice("Posto adicionado.");
+      const nextPostos =
+        existingIndex >= 0
+          ? store.postos.map((posto, index) => (index === existingIndex ? nextPosto : posto))
+          : [...store.postos, nextPosto];
+
+      writeDemoStore({ ...store, postos: nextPostos });
+      setPostoForm(emptyPostoForm());
+      setNotice("Posto guardado.");
       await loadData();
       return;
     }
@@ -649,21 +681,76 @@ export function BillingApp() {
       return;
     }
 
-    const { error: insertError } = await supabase.rpc("app_criar_posto", {
+    setPostoSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_guardar_posto", {
       p_token: sessionToken,
+      p_id: postoForm.id,
       p_nome: nome,
-      p_responsavel: newPostoResponsavel.trim() || null
+      p_responsavel: postoForm.responsavel.trim() || null,
+      p_ativo: postoForm.ativo
     });
 
-    if (insertError) {
-      setError(insertError.message);
+    setPostoSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
       return;
     }
 
-    setNewPostoName("");
-    setNewPostoResponsavel("");
-    setNotice("Posto adicionado.");
+    setPostoForm(emptyPostoForm());
+    setNotice("Posto guardado.");
     await loadData();
+  }
+
+  async function handleDeletePosto(posto: Posto) {
+    const shouldDelete = window.confirm(`Eliminar o posto "${posto.nome}"?`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      writeDemoStore({
+        ...store,
+        postos: store.postos.map((item) => (item.id === posto.id ? { ...item, ativo: false } : item))
+      });
+      setPostoForm((current) => (current.id === posto.id ? emptyPostoForm() : current));
+      setNotice("Posto eliminado.");
+      await loadData();
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_posto", {
+      p_token: sessionToken,
+      p_id: posto.id
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setPostoForm((current) => (current.id === posto.id ? emptyPostoForm() : current));
+    setNotice("Posto eliminado.");
+    await loadData();
+  }
+
+  function handleEditPosto(posto: Posto) {
+    setPostoForm({
+      id: posto.id,
+      nome: posto.nome,
+      responsavel: posto.responsavel ?? "",
+      ativo: posto.ativo
+    });
   }
 
   async function handleSaveTipoDespesa(event: FormEvent<HTMLFormElement>) {
@@ -1533,37 +1620,78 @@ export function BillingApp() {
                 </div>
               </div>
 
-              <form className="posto-form" onSubmit={handleAddPosto}>
+              <form className="posto-form" onSubmit={handleSavePosto}>
                 <label>
                   Nome
                   <input
-                    value={newPostoName}
-                    onChange={(event) => setNewPostoName(event.target.value)}
+                    value={postoForm.nome}
+                    onChange={(event) => setPostoForm((current) => ({ ...current, nome: event.target.value }))}
                     placeholder="Ex.: Bar palco"
+                    required
                   />
                 </label>
                 <label>
                   Responsável
                   <input
-                    value={newPostoResponsavel}
-                    onChange={(event) => setNewPostoResponsavel(event.target.value)}
+                    value={postoForm.responsavel}
+                    onChange={(event) =>
+                      setPostoForm((current) => ({ ...current, responsavel: event.target.value }))
+                    }
                     placeholder="Nome ou equipa"
                   />
                 </label>
-                <button className="secondary-button" type="submit">
-                  <Plus size={18} aria-hidden="true" />
-                  Adicionar
-                </button>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={postoForm.ativo}
+                    onChange={(event) => setPostoForm((current) => ({ ...current, ativo: event.target.checked }))}
+                  />
+                  Ativo
+                </label>
+                <div className="user-form-actions">
+                  <button className="secondary-button" type="submit" disabled={postoSaving}>
+                    {postoForm.id ? <Save size={18} aria-hidden="true" /> : <Plus size={18} aria-hidden="true" />}
+                    {postoSaving ? "A guardar" : postoForm.id ? "Guardar" : "Criar"}
+                  </button>
+                  {postoForm.id ? (
+                    <button className="icon-text-button" type="button" onClick={() => setPostoForm(emptyPostoForm())}>
+                      <X size={18} aria-hidden="true" />
+                      Cancelar
+                    </button>
+                  ) : null}
+                </div>
               </form>
 
               <div className="posto-list">
-                {activePostos.map((posto) => (
+                {orderedPostos.map((posto) => (
                   <div className="posto-row" key={posto.id}>
                     <div>
                       <strong>{posto.nome}</strong>
-                      <span>{posto.responsavel || "Sem responsável"}</span>
+                      <span>
+                        {posto.responsavel || "Sem responsável"} · {posto.ativo ? "ativo" : "inativo"}
+                      </span>
                     </div>
-                    <WalletCards size={18} aria-hidden="true" />
+                    <div className="row-actions">
+                      <button
+                        className="icon-button"
+                        type="button"
+                        title="Editar posto"
+                        aria-label="Editar posto"
+                        onClick={() => handleEditPosto(posto)}
+                      >
+                        <Pencil size={17} aria-hidden="true" />
+                      </button>
+                      <button
+                        className="icon-button danger"
+                        type="button"
+                        title="Eliminar posto"
+                        aria-label="Eliminar posto"
+                        onClick={() => void handleDeletePosto(posto)}
+                        disabled={!posto.ativo}
+                      >
+                        <Trash2 size={17} aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -260,6 +260,10 @@ td span,
   align-items: end;
 }
 
+.posto-form .user-form-actions {
+  grid-column: 1 / -1;
+}
+
 .tipo-form {
   grid-template-columns: 1fr auto;
   align-items: end;
@@ -415,7 +419,7 @@ input:disabled {
   background: rgba(255, 255, 255, 0.52);
 }
 
-.posto-row div,
+.posto-row > div:first-child,
 .tipo-row div,
 .user-row div,
 td:first-child {

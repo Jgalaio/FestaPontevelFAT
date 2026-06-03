@@ -301,6 +301,10 @@ export type Database = {
         Args: { p_token: string; p_id: string };
         Returns: null;
       };
+      app_apagar_posto: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
+      };
       app_apagar_registo: {
         Args: { p_token: string; p_id: string };
         Returns: null;
@@ -323,6 +327,16 @@ export type Database = {
           p_observacoes?: string | null;
         };
         Returns: string;
+      };
+      app_guardar_posto: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_nome: string;
+          p_responsavel?: string | null;
+          p_ativo?: boolean;
+        };
+        Returns: Posto[];
       };
       app_guardar_tipo_despesa: {
         Args: {
