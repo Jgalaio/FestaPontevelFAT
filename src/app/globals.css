@@ -208,6 +208,10 @@ td span,
   margin-bottom: 16px;
 }
 
+.entry-panel {
+  grid-row: span 2;
+}
+
 .panel {
   padding: 20px;
 }
@@ -243,7 +247,8 @@ td span,
 }
 
 .auth-form,
-.posto-form {
+.posto-form,
+.profile-form {
   display: grid;
   gap: 12px;
 }
@@ -335,6 +340,27 @@ textarea:focus {
   background: #c8eee6;
 }
 
+.profile-meta {
+  display: grid;
+  gap: 3px;
+  min-height: 58px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.profile-meta span,
+.profile-meta small {
+  color: var(--muted);
+}
+
+.profile-meta span {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .posto-list {
   display: grid;
   gap: 10px;
@@ -369,7 +395,7 @@ td:first-child {
 
 table {
   width: 100%;
-  min-width: 850px;
+  min-width: 980px;
   border-collapse: collapse;
 }
 
@@ -389,6 +415,11 @@ th {
 
 td {
   font-size: 0.94rem;
+}
+
+.audit-cell {
+  display: grid;
+  gap: 3px;
 }
 
 .row-actions {
@@ -444,6 +475,7 @@ td {
   .metric-total,
   .entry-panel {
     grid-column: 1 / -1;
+    grid-row: auto;
   }
 
   .posto-form {

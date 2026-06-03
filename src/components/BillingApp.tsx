@@ -14,11 +14,12 @@ import {
   RefreshCw,
   Save,
   Trash2,
+  UserRound,
   WalletCards
 } from "lucide-react";
 import { createBrowserSupabaseClient, hasSupabaseConfig } from "@/lib/supabase";
-import { formatCurrency, formatDateLabel, parseMoney, todayISO } from "@/lib/format";
-import type { Posto, Registo, RegistoForm, RegistoRow } from "@/lib/types";
+import { formatCurrency, formatDateLabel, formatDateTimeLabel, parseMoney, todayISO } from "@/lib/format";
+import type { Posto, Registo, RegistoForm, RegistoRow, Utilizador } from "@/lib/types";
 
 type DemoStore = {
   postos: Posto[];
@@ -26,6 +27,7 @@ type DemoStore = {
 };
 
 const STORAGE_KEY = "pontevel-faturacao-mvp";
+const DEMO_OPERATOR_KEY = "pontevel-faturacao-operador";
 
 const basePostos: Posto[] = [
   {
@@ -96,6 +98,34 @@ function writeDemoStore(store: DemoStore) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 }
 
+function readDemoOperator() {
+  if (typeof window === "undefined") {
+    return "Demonstração";
+  }
+
+  return window.localStorage.getItem(DEMO_OPERATOR_KEY) || "Demonstração";
+}
+
+function writeDemoOperator(nome: string) {
+  window.localStorage.setItem(DEMO_OPERATOR_KEY, nome);
+}
+
+function getSessionFallbackName(session: Session | null) {
+  if (!session) {
+    return "Utilizador";
+  }
+
+  const metadata = session.user.user_metadata ?? {};
+  const metadataName =
+    typeof metadata.nome === "string"
+      ? metadata.nome
+      : typeof metadata.name === "string"
+        ? metadata.name
+        : "";
+
+  return metadataName || session.user.email?.split("@")[0] || "Utilizador";
+}
+
 function attachPostos(registos: RegistoRow[], postos: Posto[]): Registo[] {
   return registos
     .map((registo) => ({
@@ -117,6 +147,9 @@ export function BillingApp() {
   const [authLoading, setAuthLoading] = useState(Boolean(supabase));
   const [authEmail, setAuthEmail] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [profile, setProfile] = useState<Utilizador | null>(null);
+  const [profileName, setProfileName] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState(startDate);
   const [form, setForm] = useState<RegistoForm>(() => emptyForm(startDate));
   const [postos, setPostos] = useState<Posto[]>([]);
@@ -150,6 +183,63 @@ export function BillingApp() {
     () => new Set(registos.map((registo) => registo.posto_id)).size,
     [registos]
   );
+
+  const currentUserName = useMemo(() => {
+    const nome = profile?.nome || profileName.trim();
+    return nome || (isDemoMode ? "Demonstração" : getSessionFallbackName(session));
+  }, [isDemoMode, profile, profileName, session]);
+
+  const currentUserEmail = session?.user.email ?? (isDemoMode ? "Modo demonstração" : "");
+
+  const loadProfile = useCallback(async () => {
+    if (isDemoMode) {
+      setProfile(null);
+      setProfileName(readDemoOperator());
+      return;
+    }
+
+    if (!supabase || !session) {
+      setProfile(null);
+      setProfileName("");
+      return;
+    }
+
+    const fallbackName = getSessionFallbackName(session);
+    const email = session.user.email ?? "";
+
+    const { data, error: profileError } = await supabase
+      .from("utilizadores")
+      .select("*")
+      .eq("id", session.user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      setProfileName(fallbackName);
+      setError(profileError.message);
+      return;
+    }
+
+    if (data) {
+      setProfile(data);
+      setProfileName(data.nome);
+      return;
+    }
+
+    const { data: createdProfile, error: createProfileError } = await supabase
+      .from("utilizadores")
+      .upsert({ id: session.user.id, email, nome: fallbackName }, { onConflict: "id" })
+      .select()
+      .single();
+
+    if (createProfileError) {
+      setProfileName(fallbackName);
+      setError(createProfileError.message);
+      return;
+    }
+
+    setProfile(createdProfile);
+    setProfileName(createdProfile.nome);
+  }, [isDemoMode, session, supabase]);
 
   const loadData = useCallback(async () => {
     setError("");
@@ -227,6 +317,10 @@ export function BillingApp() {
   }, [loadData]);
 
   useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
+
+  useEffect(() => {
     if (!form.postoId && activePostos[0]) {
       setForm((current) => ({ ...current, postoId: activePostos[0].id }));
     }
@@ -264,6 +358,57 @@ export function BillingApp() {
     await supabase.auth.signOut();
     setRegistos([]);
     setPostos([]);
+    setProfile(null);
+    setProfileName("");
+  }
+
+  async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const nome = profileName.trim();
+
+    if (!nome) {
+      setError("Indica o nome do utilizador.");
+      return;
+    }
+
+    if (isDemoMode) {
+      writeDemoOperator(nome);
+      setNotice("Utilizador guardado.");
+      return;
+    }
+
+    if (!supabase || !session) {
+      return;
+    }
+
+    setProfileSaving(true);
+
+    const { data, error: saveProfileError } = await supabase
+      .from("utilizadores")
+      .upsert(
+        {
+          id: session.user.id,
+          email: session.user.email ?? "",
+          nome
+        },
+        { onConflict: "id" }
+      )
+      .select()
+      .single();
+
+    setProfileSaving(false);
+
+    if (saveProfileError) {
+      setError(saveProfileError.message);
+      return;
+    }
+
+    setProfile(data);
+    setProfileName(data.nome);
+    setNotice("Utilizador guardado.");
   }
 
   function handleDateChange(value: string) {
@@ -355,11 +500,16 @@ export function BillingApp() {
       const existingIndex = store.registos.findIndex(
         (registo) => registo.posto_id === payload.posto_id && registo.data === payload.data
       );
+      const existingRegisto = existingIndex >= 0 ? store.registos[existingIndex] : null;
       const now = new Date().toISOString();
       const nextRegisto: RegistoRow = {
-        id: existingIndex >= 0 ? store.registos[existingIndex].id : makeId("registo"),
-        created_at: existingIndex >= 0 ? store.registos[existingIndex].created_at : now,
+        id: existingRegisto?.id ?? makeId("registo"),
+        created_at: existingRegisto?.created_at ?? now,
         updated_at: now,
+        criado_por_id: existingRegisto?.criado_por_id ?? null,
+        criado_por_nome: existingRegisto?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: null,
+        atualizado_por_nome: currentUserName,
         ...payload
       };
 
@@ -381,14 +531,42 @@ export function BillingApp() {
       return;
     }
 
-    const { error: saveError } = await supabase
+    const actorId = session?.user.id ?? null;
+    const actorName = currentUserName;
+    const { data: existingRegisto, error: lookupError } = await supabase
       .from("registos_faturacao")
-      .upsert(payload, { onConflict: "posto_id,data" });
+      .select("id, criado_por_id, criado_por_nome")
+      .eq("posto_id", payload.posto_id)
+      .eq("data", payload.data)
+      .maybeSingle();
+
+    if (lookupError) {
+      setSaving(false);
+      setError(lookupError.message);
+      return;
+    }
+
+    const saveResult = existingRegisto
+      ? await supabase
+          .from("registos_faturacao")
+          .update({
+            ...payload,
+            atualizado_por_id: actorId,
+            atualizado_por_nome: actorName
+          })
+          .eq("id", existingRegisto.id)
+      : await supabase.from("registos_faturacao").insert({
+          ...payload,
+          criado_por_id: actorId,
+          criado_por_nome: actorName,
+          atualizado_por_id: actorId,
+          atualizado_por_nome: actorName
+        });
 
     setSaving(false);
 
-    if (saveError) {
-      setError(saveError.message);
+    if (saveResult.error) {
+      setError(saveResult.error.message);
       return;
     }
 
@@ -504,6 +682,9 @@ export function BillingApp() {
           </label>
 
           {isDemoMode ? <span className="status-chip">Demonstração</span> : null}
+          {!isDemoMode || currentUserName !== "Demonstração" ? (
+            <span className="status-chip">{currentUserName}</span>
+          ) : null}
 
           {!isDemoMode ? (
             <button className="icon-text-button" type="button" onClick={handleSignOut}>
@@ -631,6 +812,41 @@ export function BillingApp() {
           </form>
         </section>
 
+        <section className="panel user-panel">
+          <div className="panel-heading">
+            <div className="heading-icon">
+              <UserRound size={20} aria-hidden="true" />
+            </div>
+            <div>
+              <p className="eyebrow">Utilizador</p>
+              <h2>Operador atual</h2>
+            </div>
+          </div>
+
+          <form className="profile-form" onSubmit={handleSaveProfile}>
+            <label>
+              Nome
+              <input
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                placeholder="Nome da pessoa"
+                required
+              />
+            </label>
+
+            <div className="profile-meta">
+              <span>Sessão</span>
+              <strong>{currentUserName}</strong>
+              <small>{currentUserEmail}</small>
+            </div>
+
+            <button className="secondary-button" type="submit" disabled={profileSaving}>
+              <Save size={18} aria-hidden="true" />
+              {profileSaving ? "A guardar" : "Guardar nome"}
+            </button>
+          </form>
+        </section>
+
         <section className="panel">
           <div className="panel-heading">
             <div className="heading-icon">
@@ -703,6 +919,7 @@ export function BillingApp() {
                   <th>Multibanco</th>
                   <th>MB Way</th>
                   <th>Total</th>
+                  <th>Alterado por</th>
                   <th>Observações</th>
                   <th aria-label="Ações" />
                 </tr>
@@ -723,6 +940,10 @@ export function BillingApp() {
                       <td>{formatCurrency(Number(registo.mbway))}</td>
                       <td>
                         <strong>{formatCurrency(total)}</strong>
+                      </td>
+                      <td className="audit-cell">
+                        <strong>{registo.atualizado_por_nome ?? registo.criado_por_nome ?? "Sem utilizador"}</strong>
+                        <span>{formatDateTimeLabel(registo.updated_at)}</span>
                       </td>
                       <td>{registo.observacoes || ""}</td>
                       <td>

@@ -6,6 +6,15 @@ export type Posto = {
   created_at: string;
 };
 
+export type Utilizador = {
+  id: string;
+  nome: string;
+  email: string;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type RegistoRow = {
   id: string;
   posto_id: string;
@@ -14,12 +23,28 @@ export type RegistoRow = {
   multibanco: number;
   mbway: number;
   observacoes: string | null;
+  criado_por_id: string | null;
+  criado_por_nome: string | null;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
   created_at: string;
   updated_at: string;
 };
 
 export type Registo = RegistoRow & {
   postos?: Pick<Posto, "id" | "nome" | "responsavel"> | null;
+};
+
+export type AuditoriaRegisto = {
+  id: string;
+  registo_id: string | null;
+  acao: "criado" | "editado" | "apagado";
+  utilizador_id: string | null;
+  utilizador_nome: string;
+  utilizador_email: string | null;
+  dados_anteriores: Record<string, unknown> | null;
+  dados_novos: Record<string, unknown> | null;
+  created_at: string;
 };
 
 export type RegistoForm = {
@@ -34,6 +59,19 @@ export type RegistoForm = {
 export type Database = {
   public: {
     Tables: {
+      utilizadores: {
+        Row: Utilizador;
+        Insert: {
+          id: string;
+          nome: string;
+          email: string;
+          ativo?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Utilizador>;
+        Relationships: [];
+      };
       postos: {
         Row: Posto;
         Insert: {
@@ -56,6 +94,10 @@ export type Database = {
           multibanco?: number;
           mbway?: number;
           observacoes?: string | null;
+          criado_por_id?: string | null;
+          criado_por_nome?: string | null;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -68,6 +110,22 @@ export type Database = {
             referencedColumns: ["id"];
           }
         ];
+      };
+      registos_faturacao_auditoria: {
+        Row: AuditoriaRegisto;
+        Insert: {
+          id?: string;
+          registo_id?: string | null;
+          acao: "criado" | "editado" | "apagado";
+          utilizador_id?: string | null;
+          utilizador_nome: string;
+          utilizador_email?: string | null;
+          dados_anteriores?: Record<string, unknown> | null;
+          dados_novos?: Record<string, unknown> | null;
+          created_at?: string;
+        };
+        Update: Partial<AuditoriaRegisto>;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;

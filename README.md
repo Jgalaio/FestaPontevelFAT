@@ -38,6 +38,22 @@ Se o teu projeto Supabase mostrar a chave antiga `anon public key`, podes usar `
 
 As regras RLS do MVP permitem leitura e escrita a utilizadores autenticados. Para produção, o próximo passo natural é separar permissões por papel, por exemplo `tesouraria`, `responsavel_posto` e `consulta`.
 
+### Atualizar uma base de dados já criada
+
+Se já tinhas corrido o primeiro schema, executa no `SQL Editor` o ficheiro:
+
+```bash
+supabase/add-utilizadores-auditoria.sql
+```
+
+Essa atualização cria:
+
+- `utilizadores`, ligado aos utilizadores do Supabase Auth
+- campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
+- `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
+
+Na app, cada pessoa pode gravar o seu nome no painel `Utilizador`; esse nome fica registado nas alterações seguintes.
+
 ## Vercel
 
 1. Criar o repositório no GitHub.
@@ -68,5 +84,4 @@ Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor des
 - Exportação CSV/PDF por dia
 - Página mensal por posto
 - Papéis/permissões por utilizador
-- Histórico de alterações
 - Fecho diário com bloqueio após validação da tesouraria
