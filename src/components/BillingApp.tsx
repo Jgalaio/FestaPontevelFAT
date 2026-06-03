@@ -370,13 +370,31 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
     [despesas, selectedPosto]
   );
 
+  const postoFinancials = useMemo(() => {
+    const next = new Map<string, { despesas: number; faturacao: number }>();
+
+    for (const registo of registos) {
+      const current = next.get(registo.posto_id) ?? { despesas: 0, faturacao: 0 };
+      current.faturacao += Number(registo.dinheiro) + Number(registo.multibanco) + Number(registo.mbway);
+      next.set(registo.posto_id, current);
+    }
+
+    for (const despesa of despesas) {
+      const current = next.get(despesa.posto_id) ?? { despesas: 0, faturacao: 0 };
+      current.despesas += Number(despesa.valor);
+      next.set(despesa.posto_id, current);
+    }
+
+    return next;
+  }, [despesas, registos]);
+
   const activeTiposDespesa = useMemo(
     () => tiposDespesa.filter((tipo) => tipo.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
     [tiposDespesa]
   );
 
-  const totals = useMemo(() => {
-    return registos.reduce(
+  const selectedTotals = useMemo(() => {
+    return selectedRegistos.reduce(
       (acc, registo) => {
         acc.dinheiro += Number(registo.dinheiro);
         acc.multibanco += Number(registo.multibanco);
@@ -386,22 +404,13 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
       },
       { dinheiro: 0, multibanco: 0, mbway: 0, total: 0 }
     );
-  }, [registos]);
-
-  const despesasTotal = useMemo(() => {
-    return despesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
-  }, [despesas]);
+  }, [selectedRegistos]);
 
   const selectedDespesasTotal = useMemo(() => {
     return selectedDespesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
   }, [selectedDespesas]);
 
-  const saldoDia = totals.total - despesasTotal;
-
-  const postosRegistados = useMemo(
-    () => new Set(registos.map((registo) => registo.posto_id)).size,
-    [registos]
-  );
+  const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -1343,35 +1352,34 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
       {!isManagementMode ? (
         <section className="summary-grid" aria-label="Totais do dia">
           <article className="metric metric-total">
-            <span>Total do dia</span>
-            <strong>{formatCurrency(totals.total)}</strong>
-            <small>{formatDateLabel(selectedDate)}</small>
+            <span>Total do posto</span>
+            <strong>{formatCurrency(selectedTotals.total)}</strong>
+            <small>{selectedPosto?.nome ?? formatDateLabel(selectedDate)}</small>
           </article>
           <article className="metric">
             <span>Despesas</span>
-            <strong>{formatCurrency(despesasTotal)}</strong>
+            <strong>{formatCurrency(selectedDespesasTotal)}</strong>
           </article>
           <article className="metric">
             <span>Saldo</span>
-            <strong>{formatCurrency(saldoDia)}</strong>
+            <strong>{formatCurrency(selectedSaldo)}</strong>
           </article>
           <article className="metric">
             <span>Dinheiro</span>
-            <strong>{formatCurrency(totals.dinheiro)}</strong>
+            <strong>{formatCurrency(selectedTotals.dinheiro)}</strong>
           </article>
           <article className="metric">
             <span>Multibanco</span>
-            <strong>{formatCurrency(totals.multibanco)}</strong>
+            <strong>{formatCurrency(selectedTotals.multibanco)}</strong>
           </article>
           <article className="metric">
             <span>MB Way</span>
-            <strong>{formatCurrency(totals.mbway)}</strong>
+            <strong>{formatCurrency(selectedTotals.mbway)}</strong>
           </article>
           <article className="metric">
-            <span>Postos fechados</span>
-            <strong>
-              {postosRegistados}/{activePostos.length}
-            </strong>
+            <span>Estado</span>
+            <strong>{selectedRegistos.length ? "Registado" : "Por fechar"}</strong>
+            <small>{formatDateLabel(selectedDate)}</small>
           </article>
         </section>
       ) : null}
@@ -1385,17 +1393,24 @@ export function BillingApp({ mode = "home" }: BillingAppProps) {
         <section className="posto-folder" aria-label="Postos">
           {activePostos.length ? (
             <div className="posto-tabs" role="tablist" aria-label="Selecionar posto">
-              {activePostos.map((posto) => (
-                <button
-                  className={`posto-tab ${selectedPosto?.id === posto.id ? "active" : ""}`}
-                  type="button"
-                  key={posto.id}
-                  onClick={() => handleSelectPosto(posto.id)}
-                >
-                  <strong>{posto.nome}</strong>
-                  <span>{posto.responsavel || "Sem responsável"}</span>
-                </button>
-              ))}
+              {activePostos.map((posto) => {
+                const postoSummary = postoFinancials.get(posto.id) ?? { despesas: 0, faturacao: 0 };
+
+                return (
+                  <button
+                    className={`posto-tab ${selectedPosto?.id === posto.id ? "active" : ""}`}
+                    type="button"
+                    key={posto.id}
+                    onClick={() => handleSelectPosto(posto.id)}
+                  >
+                    <strong>{posto.nome}</strong>
+                    <span>{posto.responsavel || "Sem responsável"}</span>
+                    <small>
+                      {formatCurrency(postoSummary.faturacao)} / {formatCurrency(postoSummary.despesas)}
+                    </small>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div className="empty-state">Sem postos ativos.</div>
