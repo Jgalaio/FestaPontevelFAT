@@ -2,32 +2,45 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import type { Session } from "@supabase/supabase-js";
 import {
   Building2,
   CalendarDays,
   Euro,
+  KeyRound,
   LogOut,
-  Mail,
   Pencil,
   Plus,
   RefreshCw,
   Save,
   Trash2,
   UserRound,
-  WalletCards
+  Users,
+  WalletCards,
+  X
 } from "lucide-react";
 import { createBrowserSupabaseClient, hasSupabaseConfig } from "@/lib/supabase";
 import { formatCurrency, formatDateLabel, formatDateTimeLabel, parseMoney, todayISO } from "@/lib/format";
-import type { Posto, Registo, RegistoForm, RegistoRow, Utilizador } from "@/lib/types";
+import type { AppSession, Posto, Registo, RegistoForm, RegistoRow, RegistoRpc, Utilizador } from "@/lib/types";
 
 type DemoStore = {
   postos: Posto[];
   registos: RegistoRow[];
 };
 
+type SideTab = "postos" | "utilizadores";
+
+type UserForm = {
+  id: string | null;
+  username: string;
+  nome: string;
+  password: string;
+  ativo: boolean;
+  role: "admin" | "operador";
+};
+
 const STORAGE_KEY = "pontevel-faturacao-mvp";
 const DEMO_OPERATOR_KEY = "pontevel-faturacao-operador";
+const APP_SESSION_KEY = "pontevel-faturacao-sessao";
 
 const basePostos: Posto[] = [
   {
@@ -72,6 +85,17 @@ function emptyForm(date = todayISO()): RegistoForm {
   };
 }
 
+function emptyUserForm(): UserForm {
+  return {
+    id: null,
+    username: "",
+    nome: "",
+    password: "",
+    ativo: true,
+    role: "operador"
+  };
+}
+
 function readDemoStore(): DemoStore {
   if (typeof window === "undefined") {
     return { postos: basePostos, registos: [] };
@@ -110,20 +134,38 @@ function writeDemoOperator(nome: string) {
   window.localStorage.setItem(DEMO_OPERATOR_KEY, nome);
 }
 
-function getSessionFallbackName(session: Session | null) {
-  if (!session) {
-    return "Utilizador";
+function readStoredSession() {
+  if (typeof window === "undefined") {
+    return null;
   }
 
-  const metadata = session.user.user_metadata ?? {};
-  const metadataName =
-    typeof metadata.nome === "string"
-      ? metadata.nome
-      : typeof metadata.name === "string"
-        ? metadata.name
-        : "";
+  const raw = window.localStorage.getItem(APP_SESSION_KEY);
 
-  return metadataName || session.user.email?.split("@")[0] || "Utilizador";
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as AppSession;
+
+    if (!parsed.token || new Date(parsed.expires_at).getTime() <= Date.now()) {
+      window.localStorage.removeItem(APP_SESSION_KEY);
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    window.localStorage.removeItem(APP_SESSION_KEY);
+    return null;
+  }
+}
+
+function writeStoredSession(session: AppSession) {
+  window.localStorage.setItem(APP_SESSION_KEY, JSON.stringify(session));
+}
+
+function clearStoredSession() {
+  window.localStorage.removeItem(APP_SESSION_KEY);
 }
 
 function attachPostos(registos: RegistoRow[], postos: Posto[]): Registo[] {
@@ -138,26 +180,41 @@ function attachPostos(registos: RegistoRow[], postos: Posto[]): Registo[] {
     });
 }
 
+function mapRegistoRpc(row: RegistoRpc): Registo {
+  const { posto_nome: postoNome, posto_responsavel: postoResponsavel, ...registo } = row;
+
+  return {
+    ...registo,
+    postos: {
+      id: row.posto_id,
+      nome: postoNome ?? "Posto removido",
+      responsavel: postoResponsavel
+    }
+  };
+}
+
 export function BillingApp() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const isDemoMode = !hasSupabaseConfig || !supabase;
   const startDate = useMemo(() => todayISO(), []);
 
-  const [session, setSession] = useState<Session | null>(null);
+  const [appSession, setAppSession] = useState<AppSession | null>(null);
   const [authLoading, setAuthLoading] = useState(Boolean(supabase));
-  const [authEmail, setAuthEmail] = useState("");
-  const [authMessage, setAuthMessage] = useState("");
-  const [profile, setProfile] = useState<Utilizador | null>(null);
-  const [profileName, setProfileName] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [selectedDate, setSelectedDate] = useState(startDate);
   const [form, setForm] = useState<RegistoForm>(() => emptyForm(startDate));
   const [postos, setPostos] = useState<Posto[]>([]);
   const [registos, setRegistos] = useState<Registo[]>([]);
+  const [utilizadores, setUtilizadores] = useState<Utilizador[]>([]);
+  const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
+  const [sideTab, setSideTab] = useState<SideTab>("postos");
   const [newPostoName, setNewPostoName] = useState("");
   const [newPostoResponsavel, setNewPostoResponsavel] = useState("");
+  const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [userSaving, setUserSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -184,62 +241,52 @@ export function BillingApp() {
     [registos]
   );
 
-  const currentUserName = useMemo(() => {
-    const nome = profile?.nome || profileName.trim();
-    return nome || (isDemoMode ? "Demonstração" : getSessionFallbackName(session));
-  }, [isDemoMode, profile, profileName, session]);
+  const currentUserName = appSession?.nome ?? demoOperator;
+  const sessionToken = appSession?.token ?? "";
+  const isLoggedIn = isDemoMode || Boolean(appSession);
+  const canManageUsers = isDemoMode || appSession?.role === "admin";
 
-  const currentUserEmail = session?.user.email ?? (isDemoMode ? "Modo demonstração" : "");
-
-  const loadProfile = useCallback(async () => {
+  const loadUsers = useCallback(async () => {
     if (isDemoMode) {
-      setProfile(null);
-      setProfileName(readDemoOperator());
+      setUtilizadores([
+        {
+          id: "demo-jgalaio",
+          username: "Jgalaio",
+          nome: "Jgalaio",
+          ativo: true,
+          role: "admin",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        {
+          id: "demo-alopes",
+          username: "ALopes",
+          nome: "ALopes",
+          ativo: true,
+          role: "operador",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ]);
       return;
     }
 
-    if (!supabase || !session) {
-      setProfile(null);
-      setProfileName("");
+    if (!supabase || !sessionToken) {
+      setUtilizadores([]);
       return;
     }
 
-    const fallbackName = getSessionFallbackName(session);
-    const email = session.user.email ?? "";
+    const { data, error: usersError } = await supabase.rpc("app_listar_utilizadores", {
+      p_token: sessionToken
+    });
 
-    const { data, error: profileError } = await supabase
-      .from("utilizadores")
-      .select("*")
-      .eq("id", session.user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      setProfileName(fallbackName);
-      setError(profileError.message);
+    if (usersError) {
+      setError(usersError.message);
       return;
     }
 
-    if (data) {
-      setProfile(data);
-      setProfileName(data.nome);
-      return;
-    }
-
-    const { data: createdProfile, error: createProfileError } = await supabase
-      .from("utilizadores")
-      .upsert({ id: session.user.id, email, nome: fallbackName }, { onConflict: "id" })
-      .select()
-      .single();
-
-    if (createProfileError) {
-      setProfileName(fallbackName);
-      setError(createProfileError.message);
-      return;
-    }
-
-    setProfile(createdProfile);
-    setProfileName(createdProfile.nome);
-  }, [isDemoMode, session, supabase]);
+    setUtilizadores(data ?? []);
+  }, [isDemoMode, sessionToken, supabase]);
 
   const loadData = useCallback(async () => {
     setError("");
@@ -252,19 +299,15 @@ export function BillingApp() {
       return;
     }
 
-    if (!supabase || !session) {
+    if (!supabase || !sessionToken) {
       return;
     }
 
     setLoading(true);
 
     const [postosResult, registosResult] = await Promise.all([
-      supabase.from("postos").select("*").order("nome", { ascending: true }),
-      supabase
-        .from("registos_faturacao")
-        .select("*, postos(id,nome,responsavel)")
-        .eq("data", selectedDate)
-        .order("created_at", { ascending: true })
+      supabase.rpc("app_listar_postos", { p_token: sessionToken }),
+      supabase.rpc("app_listar_registos", { p_token: sessionToken, p_data: selectedDate })
     ]);
 
     setLoading(false);
@@ -280,45 +323,65 @@ export function BillingApp() {
     }
 
     setPostos(postosResult.data ?? []);
-    setRegistos((registosResult.data ?? []) as Registo[]);
-  }, [isDemoMode, selectedDate, session, supabase]);
+    setRegistos((registosResult.data ?? []).map(mapRegistoRpc));
+  }, [isDemoMode, selectedDate, sessionToken, supabase]);
 
   useEffect(() => {
     if (!supabase) {
       setAuthLoading(false);
+      setDemoOperator(readDemoOperator());
       return;
     }
 
-    let mounted = true;
+    const storedSession = readStoredSession();
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) {
-        return;
-      }
-
-      setSession(data.session);
+    if (!storedSession) {
       setAuthLoading(false);
-    });
+      return;
+    }
 
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-    });
+    supabase
+      .rpc("app_utilizador_por_token", { p_token: storedSession.token })
+      .then(({ data, error: sessionError }) => {
+        if (sessionError || !data?.[0]) {
+          clearStoredSession();
+          setAppSession(null);
+          return;
+        }
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+        const validatedSession: AppSession = {
+          token: storedSession.token,
+          utilizador_id: data[0].utilizador_id,
+          username: data[0].username,
+          nome: data[0].nome,
+          role: data[0].role,
+          expires_at: data[0].expires_at
+        };
+
+        setAppSession(validatedSession);
+        writeStoredSession(validatedSession);
+      })
+      .finally(() => setAuthLoading(false));
   }, [supabase]);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    if (isLoggedIn) {
+      void loadData();
+    }
+  }, [isLoggedIn, loadData]);
 
   useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
+    if (isLoggedIn && sideTab === "utilizadores" && canManageUsers) {
+      void loadUsers();
+    }
+  }, [canManageUsers, isLoggedIn, loadUsers, sideTab]);
+
+  useEffect(() => {
+    if (!canManageUsers) {
+      setUtilizadores([]);
+      setUserForm(emptyUserForm());
+    }
+  }, [canManageUsers]);
 
   useEffect(() => {
     if (!form.postoId && activePostos[0]) {
@@ -329,86 +392,43 @@ export function BillingApp() {
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setAuthMessage("");
+    setNotice("");
 
-    if (!supabase || !authEmail.trim()) {
+    if (!supabase || !authUsername.trim() || !authPassword) {
       return;
     }
 
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email: authEmail.trim(),
-      options: {
-        emailRedirectTo: window.location.origin
-      }
+    setAuthLoading(true);
+
+    const { data, error: loginError } = await supabase.rpc("app_login", {
+      p_username: authUsername.trim(),
+      p_password: authPassword
     });
 
-    if (signInError) {
-      setError(signInError.message);
+    setAuthLoading(false);
+
+    if (loginError || !data?.[0]) {
+      setError(loginError?.message ?? "Não foi possível iniciar sessão.");
       return;
     }
 
-    setAuthMessage("Ligação enviada para o email.");
+    const nextSession = data[0];
+    setAppSession(nextSession);
+    writeStoredSession(nextSession);
+    setAuthPassword("");
+    setNotice("Sessão iniciada.");
   }
 
   async function handleSignOut() {
-    if (!supabase) {
-      return;
+    if (supabase && appSession) {
+      await supabase.rpc("app_logout", { p_token: appSession.token });
     }
 
-    await supabase.auth.signOut();
+    clearStoredSession();
+    setAppSession(null);
     setRegistos([]);
     setPostos([]);
-    setProfile(null);
-    setProfileName("");
-  }
-
-  async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setNotice("");
-
-    const nome = profileName.trim();
-
-    if (!nome) {
-      setError("Indica o nome do utilizador.");
-      return;
-    }
-
-    if (isDemoMode) {
-      writeDemoOperator(nome);
-      setNotice("Utilizador guardado.");
-      return;
-    }
-
-    if (!supabase || !session) {
-      return;
-    }
-
-    setProfileSaving(true);
-
-    const { data, error: saveProfileError } = await supabase
-      .from("utilizadores")
-      .upsert(
-        {
-          id: session.user.id,
-          email: session.user.email ?? "",
-          nome
-        },
-        { onConflict: "id" }
-      )
-      .select()
-      .single();
-
-    setProfileSaving(false);
-
-    if (saveProfileError) {
-      setError(saveProfileError.message);
-      return;
-    }
-
-    setProfile(data);
-    setProfileName(data.nome);
-    setNotice("Utilizador guardado.");
+    setUtilizadores([]);
   }
 
   function handleDateChange(value: string) {
@@ -445,8 +465,7 @@ export function BillingApp() {
         created_at: new Date().toISOString()
       };
 
-      const nextStore = { ...store, postos: [...store.postos, nextPosto] };
-      writeDemoStore(nextStore);
+      writeDemoStore({ ...store, postos: [...store.postos, nextPosto] });
       setNewPostoName("");
       setNewPostoResponsavel("");
       setNotice("Posto adicionado.");
@@ -454,13 +473,14 @@ export function BillingApp() {
       return;
     }
 
-    if (!supabase) {
+    if (!supabase || !sessionToken) {
       return;
     }
 
-    const { error: insertError } = await supabase.from("postos").insert({
-      nome,
-      responsavel: newPostoResponsavel.trim() || null
+    const { error: insertError } = await supabase.rpc("app_criar_posto", {
+      p_token: sessionToken,
+      p_nome: nome,
+      p_responsavel: newPostoResponsavel.trim() || null
     });
 
     if (insertError) {
@@ -526,47 +546,25 @@ export function BillingApp() {
       return;
     }
 
-    if (!supabase) {
+    if (!supabase || !sessionToken) {
       setSaving(false);
       return;
     }
 
-    const actorId = session?.user.id ?? null;
-    const actorName = currentUserName;
-    const { data: existingRegisto, error: lookupError } = await supabase
-      .from("registos_faturacao")
-      .select("id, criado_por_id, criado_por_nome")
-      .eq("posto_id", payload.posto_id)
-      .eq("data", payload.data)
-      .maybeSingle();
-
-    if (lookupError) {
-      setSaving(false);
-      setError(lookupError.message);
-      return;
-    }
-
-    const saveResult = existingRegisto
-      ? await supabase
-          .from("registos_faturacao")
-          .update({
-            ...payload,
-            atualizado_por_id: actorId,
-            atualizado_por_nome: actorName
-          })
-          .eq("id", existingRegisto.id)
-      : await supabase.from("registos_faturacao").insert({
-          ...payload,
-          criado_por_id: actorId,
-          criado_por_nome: actorName,
-          atualizado_por_id: actorId,
-          atualizado_por_nome: actorName
-        });
+    const { error: saveError } = await supabase.rpc("app_guardar_registo", {
+      p_token: sessionToken,
+      p_posto_id: payload.posto_id,
+      p_data: payload.data,
+      p_dinheiro: payload.dinheiro,
+      p_multibanco: payload.multibanco,
+      p_mbway: payload.mbway,
+      p_observacoes: payload.observacoes
+    });
 
     setSaving(false);
 
-    if (saveResult.error) {
-      setError(saveResult.error.message);
+    if (saveError) {
+      setError(saveError.message);
       return;
     }
 
@@ -596,11 +594,14 @@ export function BillingApp() {
       return;
     }
 
-    if (!supabase) {
+    if (!supabase || !sessionToken) {
       return;
     }
 
-    const { error: deleteError } = await supabase.from("registos_faturacao").delete().eq("id", id);
+    const { error: deleteError } = await supabase.rpc("app_apagar_registo", {
+      p_token: sessionToken,
+      p_id: id
+    });
 
     if (deleteError) {
       setError(deleteError.message);
@@ -623,6 +624,86 @@ export function BillingApp() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    if (!userForm.username.trim() || !userForm.nome.trim()) {
+      setError("Indica username e nome.");
+      return;
+    }
+
+    if (!userForm.id && !userForm.password) {
+      setError("Indica a password inicial.");
+      return;
+    }
+
+    if (!canManageUsers) {
+      setError("Apenas administradores podem gerir utilizadores.");
+      return;
+    }
+
+    if (isDemoMode) {
+      writeDemoOperator(userForm.nome.trim());
+      setDemoOperator(userForm.nome.trim());
+      setNotice("Utilizador guardado em modo demonstração.");
+      setUserForm(emptyUserForm());
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setUserSaving(true);
+
+    const { data, error: userError } = await supabase.rpc("app_guardar_utilizador", {
+      p_token: sessionToken,
+      p_id: userForm.id,
+      p_username: userForm.username.trim(),
+      p_nome: userForm.nome.trim(),
+      p_password: userForm.password || null,
+      p_ativo: userForm.ativo,
+      p_role: userForm.role
+    });
+
+    setUserSaving(false);
+
+    if (userError || !data?.[0]) {
+      setError(userError?.message ?? "Não foi possível guardar o utilizador.");
+      return;
+    }
+
+    const savedUser = data[0];
+
+    if (appSession?.utilizador_id === savedUser.id) {
+      const nextSession = {
+        ...appSession,
+        username: savedUser.username,
+        nome: savedUser.nome,
+        role: savedUser.role
+      };
+      setAppSession(nextSession);
+      writeStoredSession(nextSession);
+    }
+
+    setNotice("Utilizador guardado.");
+    setUserForm(emptyUserForm());
+    await loadUsers();
+  }
+
+  function handleEditUser(user: Utilizador) {
+    setUserForm({
+      id: user.id,
+      username: user.username,
+      nome: user.nome,
+      password: "",
+      ativo: user.ativo,
+      role: user.role
+    });
+  }
+
   if (authLoading) {
     return (
       <main className="app-shell auth-shell">
@@ -634,7 +715,7 @@ export function BillingApp() {
     );
   }
 
-  if (!isDemoMode && !session) {
+  if (!isDemoMode && !appSession) {
     return (
       <main className="app-shell auth-shell">
         <section className="auth-panel">
@@ -645,22 +726,31 @@ export function BillingApp() {
 
           <form className="auth-form" onSubmit={handleLogin}>
             <label>
-              Email
+              Username
               <input
-                type="email"
-                value={authEmail}
-                onChange={(event) => setAuthEmail(event.target.value)}
-                placeholder="nome@exemplo.pt"
+                value={authUsername}
+                onChange={(event) => setAuthUsername(event.target.value)}
+                placeholder="Jgalaio"
+                autoComplete="username"
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                autoComplete="current-password"
                 required
               />
             </label>
             <button className="primary-button" type="submit">
-              <Mail size={18} aria-hidden="true" />
-              Enviar ligação
+              <KeyRound size={18} aria-hidden="true" />
+              Entrar
             </button>
           </form>
 
-          {authMessage ? <div className="alert success">{authMessage}</div> : null}
           {error ? <div className="alert error">{error}</div> : null}
         </section>
       </main>
@@ -682,12 +772,11 @@ export function BillingApp() {
           </label>
 
           {isDemoMode ? <span className="status-chip">Demonstração</span> : null}
-          {!isDemoMode || currentUserName !== "Demonstração" ? (
-            <span className="status-chip">{currentUserName}</span>
-          ) : null}
+          <span className="status-chip">{currentUserName}</span>
+          {!isDemoMode && appSession ? <span className="status-chip">{appSession.role}</span> : null}
 
           {!isDemoMode ? (
-            <button className="icon-text-button" type="button" onClick={handleSignOut}>
+            <button className="icon-text-button" type="button" onClick={() => void handleSignOut()}>
               <LogOut size={18} aria-hidden="true" />
               Sair
             </button>
@@ -812,86 +901,181 @@ export function BillingApp() {
           </form>
         </section>
 
-        <section className="panel user-panel">
-          <div className="panel-heading">
-            <div className="heading-icon">
-              <UserRound size={20} aria-hidden="true" />
-            </div>
-            <div>
-              <p className="eyebrow">Utilizador</p>
-              <h2>Operador atual</h2>
-            </div>
+        <section className="panel side-panel">
+          <div className="side-tabs" role="tablist" aria-label="Gestão">
+            <button
+              className={`tab-button ${sideTab === "postos" ? "active" : ""}`}
+              type="button"
+              onClick={() => setSideTab("postos")}
+            >
+              <Building2 size={18} aria-hidden="true" />
+              Postos
+            </button>
+            <button
+              className={`tab-button ${sideTab === "utilizadores" ? "active" : ""}`}
+              type="button"
+              onClick={() => setSideTab("utilizadores")}
+            >
+              <Users size={18} aria-hidden="true" />
+              Utilizadores
+            </button>
           </div>
 
-          <form className="profile-form" onSubmit={handleSaveProfile}>
-            <label>
-              Nome
-              <input
-                value={profileName}
-                onChange={(event) => setProfileName(event.target.value)}
-                placeholder="Nome da pessoa"
-                required
-              />
-            </label>
-
-            <div className="profile-meta">
-              <span>Sessão</span>
-              <strong>{currentUserName}</strong>
-              <small>{currentUserEmail}</small>
-            </div>
-
-            <button className="secondary-button" type="submit" disabled={profileSaving}>
-              <Save size={18} aria-hidden="true" />
-              {profileSaving ? "A guardar" : "Guardar nome"}
-            </button>
-          </form>
-        </section>
-
-        <section className="panel">
-          <div className="panel-heading">
-            <div className="heading-icon">
-              <Building2 size={20} aria-hidden="true" />
-            </div>
-            <div>
-              <p className="eyebrow">Postos</p>
-              <h2>Pontos de faturação</h2>
-            </div>
-          </div>
-
-          <form className="posto-form" onSubmit={handleAddPosto}>
-            <label>
-              Nome
-              <input
-                value={newPostoName}
-                onChange={(event) => setNewPostoName(event.target.value)}
-                placeholder="Ex.: Bar palco"
-              />
-            </label>
-            <label>
-              Responsável
-              <input
-                value={newPostoResponsavel}
-                onChange={(event) => setNewPostoResponsavel(event.target.value)}
-                placeholder="Nome ou equipa"
-              />
-            </label>
-            <button className="secondary-button" type="submit">
-              <Plus size={18} aria-hidden="true" />
-              Adicionar
-            </button>
-          </form>
-
-          <div className="posto-list">
-            {activePostos.map((posto) => (
-              <div className="posto-row" key={posto.id}>
-                <div>
-                  <strong>{posto.nome}</strong>
-                  <span>{posto.responsavel || "Sem responsável"}</span>
+          {sideTab === "postos" ? (
+            <>
+              <div className="panel-heading">
+                <div className="heading-icon">
+                  <Building2 size={20} aria-hidden="true" />
                 </div>
-                <WalletCards size={18} aria-hidden="true" />
+                <div>
+                  <p className="eyebrow">Postos</p>
+                  <h2>Pontos de faturação</h2>
+                </div>
               </div>
-            ))}
-          </div>
+
+              <form className="posto-form" onSubmit={handleAddPosto}>
+                <label>
+                  Nome
+                  <input
+                    value={newPostoName}
+                    onChange={(event) => setNewPostoName(event.target.value)}
+                    placeholder="Ex.: Bar palco"
+                  />
+                </label>
+                <label>
+                  Responsável
+                  <input
+                    value={newPostoResponsavel}
+                    onChange={(event) => setNewPostoResponsavel(event.target.value)}
+                    placeholder="Nome ou equipa"
+                  />
+                </label>
+                <button className="secondary-button" type="submit">
+                  <Plus size={18} aria-hidden="true" />
+                  Adicionar
+                </button>
+              </form>
+
+              <div className="posto-list">
+                {activePostos.map((posto) => (
+                  <div className="posto-row" key={posto.id}>
+                    <div>
+                      <strong>{posto.nome}</strong>
+                      <span>{posto.responsavel || "Sem responsável"}</span>
+                    </div>
+                    <WalletCards size={18} aria-hidden="true" />
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="panel-heading">
+                <div className="heading-icon">
+                  <UserRound size={20} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="eyebrow">Equipa</p>
+                  <h2>Criação e edição</h2>
+                </div>
+              </div>
+
+              {canManageUsers ? (
+                <form className="user-form" onSubmit={handleSaveUser}>
+                  <label>
+                    Username
+                    <input
+                      value={userForm.username}
+                      onChange={(event) => setUserForm((current) => ({ ...current, username: event.target.value }))}
+                      placeholder="Username"
+                      autoComplete="off"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Nome
+                    <input
+                      value={userForm.nome}
+                      onChange={(event) => setUserForm((current) => ({ ...current, nome: event.target.value }))}
+                      placeholder="Nome"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Password
+                    <input
+                      type="password"
+                      value={userForm.password}
+                      onChange={(event) => setUserForm((current) => ({ ...current, password: event.target.value }))}
+                      placeholder={userForm.id ? "Manter atual" : "Password inicial"}
+                      autoComplete="new-password"
+                    />
+                  </label>
+                  <label>
+                    Papel
+                    <select
+                      value={userForm.role}
+                      onChange={(event) =>
+                        setUserForm((current) => ({
+                          ...current,
+                          role: event.target.value === "admin" ? "admin" : "operador"
+                        }))
+                      }
+                    >
+                      <option value="operador">Operador</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </label>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={userForm.ativo}
+                      onChange={(event) => setUserForm((current) => ({ ...current, ativo: event.target.checked }))}
+                    />
+                    Ativo
+                  </label>
+                  <div className="user-form-actions">
+                    <button className="secondary-button" type="submit" disabled={userSaving}>
+                      <Save size={18} aria-hidden="true" />
+                      {userSaving ? "A guardar" : userForm.id ? "Guardar" : "Criar"}
+                    </button>
+                    {userForm.id ? (
+                      <button className="icon-text-button" type="button" onClick={() => setUserForm(emptyUserForm())}>
+                        <X size={18} aria-hidden="true" />
+                        Cancelar
+                      </button>
+                    ) : null}
+                  </div>
+                </form>
+              ) : (
+                <div className="empty-state">Sem permissão para editar utilizadores.</div>
+              )}
+
+              <div className="user-list">
+                {utilizadores.map((user) => (
+                  <div className="user-row" key={user.id}>
+                    <div>
+                      <strong>{user.nome}</strong>
+                      <span>
+                        {user.username} · {user.role} · {user.ativo ? "ativo" : "inativo"}
+                      </span>
+                    </div>
+                    {canManageUsers ? (
+                      <button
+                        className="icon-button"
+                        type="button"
+                        title="Editar utilizador"
+                        aria-label="Editar utilizador"
+                        onClick={() => handleEditUser(user)}
+                      >
+                        <Pencil size={17} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </div>
 

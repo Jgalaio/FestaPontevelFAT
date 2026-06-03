@@ -8,9 +8,10 @@ export type Posto = {
 
 export type Utilizador = {
   id: string;
+  username: string;
   nome: string;
-  email: string;
   ativo: boolean;
+  role: "admin" | "operador";
   created_at: string;
   updated_at: string;
 };
@@ -41,7 +42,7 @@ export type AuditoriaRegisto = {
   acao: "criado" | "editado" | "apagado";
   utilizador_id: string | null;
   utilizador_nome: string;
-  utilizador_email: string | null;
+  utilizador_username: string | null;
   dados_anteriores: Record<string, unknown> | null;
   dados_novos: Record<string, unknown> | null;
   created_at: string;
@@ -56,20 +57,62 @@ export type RegistoForm = {
   observacoes: string;
 };
 
+export type AppSession = {
+  token: string;
+  utilizador_id: string;
+  username: string;
+  nome: string;
+  role: "admin" | "operador";
+  expires_at: string;
+};
+
+export type RegistoRpc = RegistoRow & {
+  posto_nome: string | null;
+  posto_responsavel: string | null;
+};
+
 export type Database = {
   public: {
     Tables: {
       utilizadores: {
-        Row: Utilizador;
+        Row: Utilizador & {
+          password_hash: string | null;
+        };
         Insert: {
-          id: string;
+          id?: string;
+          username: string;
           nome: string;
-          email: string;
+          password_hash?: string | null;
           ativo?: boolean;
+          role?: "admin" | "operador";
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Utilizador>;
+        Update: Partial<Utilizador & { password_hash: string | null }>;
+        Relationships: [];
+      };
+      utilizador_sessoes: {
+        Row: {
+          id: string;
+          utilizador_id: string;
+          token_hash: string;
+          created_at: string;
+          expires_at: string;
+        };
+        Insert: {
+          id?: string;
+          utilizador_id: string;
+          token_hash: string;
+          created_at?: string;
+          expires_at: string;
+        };
+        Update: Partial<{
+          id: string;
+          utilizador_id: string;
+          token_hash: string;
+          created_at: string;
+          expires_at: string;
+        }>;
         Relationships: [];
       };
       postos: {
@@ -119,7 +162,7 @@ export type Database = {
           acao: "criado" | "editado" | "apagado";
           utilizador_id?: string | null;
           utilizador_nome: string;
-          utilizador_email?: string | null;
+          utilizador_username?: string | null;
           dados_anteriores?: Record<string, unknown> | null;
           dados_novos?: Record<string, unknown> | null;
           created_at?: string;
@@ -129,7 +172,64 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      app_apagar_registo: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
+      };
+      app_criar_posto: {
+        Args: { p_token: string; p_nome: string; p_responsavel?: string | null };
+        Returns: Posto[];
+      };
+      app_guardar_registo: {
+        Args: {
+          p_token: string;
+          p_posto_id: string;
+          p_data: string;
+          p_dinheiro: number;
+          p_multibanco: number;
+          p_mbway: number;
+          p_observacoes?: string | null;
+        };
+        Returns: string;
+      };
+      app_guardar_utilizador: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_username: string;
+          p_nome: string;
+          p_password?: string | null;
+          p_ativo?: boolean;
+          p_role?: "admin" | "operador";
+        };
+        Returns: Utilizador[];
+      };
+      app_listar_postos: {
+        Args: { p_token: string };
+        Returns: Posto[];
+      };
+      app_listar_registos: {
+        Args: { p_token: string; p_data: string };
+        Returns: RegistoRpc[];
+      };
+      app_listar_utilizadores: {
+        Args: { p_token: string };
+        Returns: Utilizador[];
+      };
+      app_login: {
+        Args: { p_username: string; p_password: string };
+        Returns: AppSession[];
+      };
+      app_logout: {
+        Args: { p_token: string };
+        Returns: null;
+      };
+      app_utilizador_por_token: {
+        Args: { p_token: string };
+        Returns: Omit<AppSession, "token">[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

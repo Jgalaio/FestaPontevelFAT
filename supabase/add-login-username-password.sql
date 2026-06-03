@@ -2,14 +2,51 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.utilizadores (
   id uuid primary key default gen_random_uuid(),
-  username text not null,
-  nome text not null,
+  username text,
+  nome text,
   password_hash text,
   ativo boolean not null default true,
-  role text not null default 'operador' check (role in ('admin', 'operador')),
+  role text not null default 'operador',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.utilizadores
+  drop constraint if exists utilizadores_id_fkey;
+
+alter table public.utilizadores
+  alter column id set default gen_random_uuid(),
+  add column if not exists username text,
+  add column if not exists password_hash text,
+  add column if not exists role text not null default 'operador';
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'utilizadores'
+      and column_name = 'email'
+  ) then
+    alter table public.utilizadores alter column email drop not null;
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'utilizadores_role_check'
+      and conrelid = 'public.utilizadores'::regclass
+  ) then
+    alter table public.utilizadores
+      add constraint utilizadores_role_check check (role in ('admin', 'operador'));
+  end if;
+end;
+$$;
 
 create unique index if not exists utilizadores_username_key
   on public.utilizadores (username);
@@ -28,30 +65,11 @@ create table if not exists public.utilizador_sessoes (
 create index if not exists idx_utilizador_sessoes_utilizador
   on public.utilizador_sessoes (utilizador_id, expires_at desc);
 
-create table if not exists public.postos (
-  id uuid primary key default gen_random_uuid(),
-  nome text not null unique,
-  responsavel text,
-  ativo boolean not null default true,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.registos_faturacao (
-  id uuid primary key default gen_random_uuid(),
-  posto_id uuid not null references public.postos(id) on delete restrict,
-  data date not null,
-  dinheiro numeric(12, 2) not null default 0 check (dinheiro >= 0),
-  multibanco numeric(12, 2) not null default 0 check (multibanco >= 0),
-  mbway numeric(12, 2) not null default 0 check (mbway >= 0),
-  observacoes text,
-  criado_por_id uuid references public.utilizadores(id) on delete set null,
-  criado_por_nome text,
-  atualizado_por_id uuid references public.utilizadores(id) on delete set null,
-  atualizado_por_nome text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (posto_id, data)
-);
+alter table public.registos_faturacao
+  add column if not exists criado_por_id uuid references public.utilizadores(id) on delete set null,
+  add column if not exists criado_por_nome text,
+  add column if not exists atualizado_por_id uuid references public.utilizadores(id) on delete set null,
+  add column if not exists atualizado_por_nome text;
 
 create table if not exists public.registos_faturacao_auditoria (
   id uuid primary key default gen_random_uuid(),
@@ -64,6 +82,9 @@ create table if not exists public.registos_faturacao_auditoria (
   dados_novos jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table public.registos_faturacao_auditoria
+  add column if not exists utilizador_username text;
 
 create index if not exists idx_registos_faturacao_data
   on public.registos_faturacao (data);
@@ -613,44 +634,14 @@ begin
 end;
 $$;
 
-create or replace view public.totais_diarios
-with (security_invoker = true)
-as
-select
-  r.data,
-  count(*) as postos_registados,
-  sum(r.dinheiro) as dinheiro,
-  sum(r.multibanco) as multibanco,
-  sum(r.mbway) as mbway,
-  sum(r.dinheiro + r.multibanco + r.mbway) as total
-from public.registos_faturacao r
-group by r.data;
-
 alter table public.utilizadores enable row level security;
 alter table public.utilizador_sessoes enable row level security;
-alter table public.postos enable row level security;
-alter table public.registos_faturacao enable row level security;
 alter table public.registos_faturacao_auditoria enable row level security;
 
 drop policy if exists "Equipa autenticada pode ler utilizadores" on public.utilizadores;
 drop policy if exists "Cada utilizador pode criar o seu perfil" on public.utilizadores;
 drop policy if exists "Cada utilizador pode editar o seu perfil" on public.utilizadores;
-drop policy if exists "Equipa autenticada pode ler postos" on public.postos;
-drop policy if exists "Equipa autenticada pode criar postos" on public.postos;
-drop policy if exists "Equipa autenticada pode editar postos" on public.postos;
-drop policy if exists "Equipa autenticada pode apagar postos" on public.postos;
-drop policy if exists "Equipa autenticada pode ler registos" on public.registos_faturacao;
-drop policy if exists "Equipa autenticada pode criar registos" on public.registos_faturacao;
-drop policy if exists "Equipa autenticada pode editar registos" on public.registos_faturacao;
-drop policy if exists "Equipa autenticada pode apagar registos" on public.registos_faturacao;
 drop policy if exists "Equipa autenticada pode ler auditoria" on public.registos_faturacao_auditoria;
-
-insert into public.postos (nome, responsavel)
-values
-  ('Bar Central', 'Equipa A'),
-  ('Bilheteira', 'Tesouraria'),
-  ('Restaurante', 'Equipa B')
-on conflict (nome) do nothing;
 
 insert into public.utilizadores (username, nome, password_hash, ativo, role)
 values

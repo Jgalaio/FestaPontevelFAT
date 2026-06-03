@@ -208,10 +208,6 @@ td span,
   margin-bottom: 16px;
 }
 
-.entry-panel {
-  grid-row: span 2;
-}
-
 .panel {
   padding: 20px;
 }
@@ -248,7 +244,7 @@ td span,
 
 .auth-form,
 .posto-form,
-.profile-form {
+.user-form {
   display: grid;
   gap: 12px;
 }
@@ -340,34 +336,48 @@ textarea:focus {
   background: #c8eee6;
 }
 
-.profile-meta {
+.side-panel {
+  align-self: start;
+}
+
+.side-tabs {
   display: grid;
-  gap: 3px;
-  min-height: 58px;
-  padding: 12px;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  margin-bottom: 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.52);
+  background: rgba(255, 255, 255, 0.46);
 }
 
-.profile-meta span,
-.profile-meta small {
+.tab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
   color: var(--muted);
+  background: transparent;
+  font-weight: 850;
 }
 
-.profile-meta span {
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-transform: uppercase;
+.tab-button.active {
+  color: #ffffff;
+  background: var(--teal);
 }
 
-.posto-list {
+.posto-list,
+.user-list {
   display: grid;
   gap: 10px;
   margin-top: 16px;
 }
 
-.posto-row {
+.posto-row,
+.user-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -380,9 +390,38 @@ textarea:focus {
 }
 
 .posto-row div,
+.user-row div,
 td:first-child {
   display: grid;
   gap: 3px;
+}
+
+.user-form {
+  grid-template-columns: 1fr 1fr;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 9px;
+  color: var(--ink);
+}
+
+.checkbox-row input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.user-form-actions {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.user-form-actions .secondary-button,
+.user-form-actions .icon-text-button {
+  flex: 1;
 }
 
 .table-heading {
@@ -475,10 +514,10 @@ td {
   .metric-total,
   .entry-panel {
     grid-column: 1 / -1;
-    grid-row: auto;
   }
 
-  .posto-form {
+  .posto-form,
+  .user-form {
     grid-template-columns: 1fr;
   }
 }
@@ -515,6 +554,15 @@ td {
   .workspace-grid,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .side-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .user-form-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .metric {

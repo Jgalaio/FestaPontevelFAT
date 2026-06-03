@@ -5,7 +5,7 @@ Sistema web para registo diário da faturação da Festa de Pontével por posto.
 ## Stack
 
 - Next.js para a app web
-- Supabase para base de dados e autenticação por email
+- Supabase para base de dados e login por username/password
 - Vercel para deploy
 - GitHub para versionamento e ligação ao Vercel
 
@@ -24,8 +24,7 @@ Sem variáveis Supabase, a app abre em modo de demonstração e guarda dados no 
 1. Criar um projeto no Supabase.
 2. Abrir `SQL Editor`.
 3. Executar o ficheiro `supabase/schema.sql`.
-4. Em `Authentication > Providers`, confirmar que o login por email está ativo.
-5. Copiar `Project URL` e a `publishable key`.
+4. Copiar `Project URL` e a `publishable key`.
 
 Depois preencher:
 
@@ -36,23 +35,30 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 
 Se o teu projeto Supabase mostrar a chave antiga `anon public key`, podes usar `NEXT_PUBLIC_SUPABASE_ANON_KEY` em vez de `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 
-As regras RLS do MVP permitem leitura e escrita a utilizadores autenticados. Para produção, o próximo passo natural é separar permissões por papel, por exemplo `tesouraria`, `responsavel_posto` e `consulta`.
+O login é feito por funções RPC da base de dados. As passwords ficam guardadas com hash `crypt`, não em texto simples.
 
 ### Atualizar uma base de dados já criada
 
-Se já tinhas corrido o primeiro schema, executa no `SQL Editor` o ficheiro:
+Se já tinhas corrido um schema anterior, executa no `SQL Editor` o ficheiro:
 
 ```bash
-supabase/add-utilizadores-auditoria.sql
+supabase/add-login-username-password.sql
 ```
 
 Essa atualização cria:
 
-- `utilizadores`, ligado aos utilizadores do Supabase Auth
+- `utilizadores`, com username, nome, password hash, ativo e papel
+- `utilizador_sessoes`, com tokens de sessão temporários
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
+- funções RPC para login, faturação, postos e gestão de utilizadores
 
-Na app, cada pessoa pode gravar o seu nome no painel `Utilizador`; esse nome fica registado nas alterações seguintes.
+Utilizadores iniciais:
+
+- `Jgalaio`
+- `ALopes`
+
+Na app, a aba `Utilizadores` permite criar e editar users, incluindo trocar password, ativar/desativar e definir o papel. Essa gestão fica reservada a utilizadores com papel `admin`.
 
 ## Vercel
 
@@ -74,7 +80,10 @@ git push -u origin main
 ## Modelo de dados
 
 - `postos`: nome, responsável, estado ativo
-- `registos_faturacao`: posto, data, dinheiro, multibanco, MB Way, observações
+- `utilizadores`: username, nome, password hash, estado ativo, papel
+- `utilizador_sessoes`: sessões temporárias de login
+- `registos_faturacao`: posto, data, dinheiro, multibanco, MB Way, observações, criado por, atualizado por
+- `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia
 
 Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor desse dia.
@@ -83,5 +92,5 @@ Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor des
 
 - Exportação CSV/PDF por dia
 - Página mensal por posto
-- Papéis/permissões por utilizador
+- Permissões mais finas por papel
 - Fecho diário com bloqueio após validação da tesouraria
