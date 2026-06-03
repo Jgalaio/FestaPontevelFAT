@@ -144,7 +144,7 @@ button:disabled {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: 1.6fr repeat(4, 1fr);
+  grid-template-columns: 1.5fr repeat(6, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -165,7 +165,7 @@ td span,
 }
 
 .metric strong {
-  font-size: clamp(1.35rem, 2.4vw, 2.1rem);
+  font-size: clamp(1.15rem, 1.8vw, 1.75rem);
   line-height: 1;
 }
 
@@ -210,6 +210,10 @@ td span,
 
 .panel {
   padding: 20px;
+}
+
+.panel + .panel {
+  margin-top: 16px;
 }
 
 .panel-heading {
@@ -292,6 +296,11 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
 }
 
+input:disabled {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.58);
+}
+
 .wide-field {
   grid-column: 1 / -1;
 }
@@ -349,6 +358,10 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.46);
+}
+
+.entry-tabs {
+  margin-bottom: 16px;
 }
 
 .tab-button {
@@ -419,6 +432,13 @@ td:first-child {
   gap: 8px;
 }
 
+.form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.form-actions .primary-button,
+.form-actions .icon-text-button,
 .user-form-actions .secondary-button,
 .user-form-actions .icon-text-button {
   flex: 1;
@@ -434,8 +454,12 @@ td:first-child {
 
 table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1040px;
   border-collapse: collapse;
+}
+
+.expenses-table {
+  min-width: 1100px;
 }
 
 th,
@@ -560,6 +584,7 @@ td {
     grid-template-columns: 1fr;
   }
 
+  .form-actions,
   .user-form-actions {
     align-items: stretch;
     flex-direction: column;

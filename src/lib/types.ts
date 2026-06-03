@@ -36,9 +36,43 @@ export type Registo = RegistoRow & {
   postos?: Pick<Posto, "id" | "nome" | "responsavel"> | null;
 };
 
+export type DespesaRow = {
+  id: string;
+  posto_id: string;
+  data: string;
+  tipo_despesa: string;
+  numero_despesa: string;
+  valor: number;
+  fatura_paga: boolean;
+  numero_fatura: string | null;
+  observacoes: string | null;
+  criado_por_id: string | null;
+  criado_por_nome: string | null;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Despesa = DespesaRow & {
+  postos?: Pick<Posto, "id" | "nome" | "responsavel"> | null;
+};
+
 export type AuditoriaRegisto = {
   id: string;
   registo_id: string | null;
+  acao: "criado" | "editado" | "apagado";
+  utilizador_id: string | null;
+  utilizador_nome: string;
+  utilizador_username: string | null;
+  dados_anteriores: Record<string, unknown> | null;
+  dados_novos: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type AuditoriaDespesa = {
+  id: string;
+  despesa_id: string | null;
   acao: "criado" | "editado" | "apagado";
   utilizador_id: string | null;
   utilizador_nome: string;
@@ -57,6 +91,18 @@ export type RegistoForm = {
   observacoes: string;
 };
 
+export type DespesaForm = {
+  id: string | null;
+  postoId: string;
+  data: string;
+  tipoDespesa: string;
+  numeroDespesa: string;
+  valor: string;
+  faturaPaga: boolean;
+  numeroFatura: string;
+  observacoes: string;
+};
+
 export type AppSession = {
   token: string;
   utilizador_id: string;
@@ -67,6 +113,11 @@ export type AppSession = {
 };
 
 export type RegistoRpc = RegistoRow & {
+  posto_nome: string | null;
+  posto_responsavel: string | null;
+};
+
+export type DespesaRpc = DespesaRow & {
   posto_nome: string | null;
   posto_responsavel: string | null;
 };
@@ -154,6 +205,35 @@ export type Database = {
           }
         ];
       };
+      despesas_posto: {
+        Row: DespesaRow;
+        Insert: {
+          id?: string;
+          posto_id: string;
+          data: string;
+          tipo_despesa: string;
+          numero_despesa: string;
+          valor?: number;
+          fatura_paga?: boolean;
+          numero_fatura?: string | null;
+          observacoes?: string | null;
+          criado_por_id?: string | null;
+          criado_por_nome?: string | null;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<DespesaRow>;
+        Relationships: [
+          {
+            foreignKeyName: "despesas_posto_posto_id_fkey";
+            columns: ["posto_id"];
+            referencedRelation: "postos";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       registos_faturacao_auditoria: {
         Row: AuditoriaRegisto;
         Insert: {
@@ -170,9 +250,29 @@ export type Database = {
         Update: Partial<AuditoriaRegisto>;
         Relationships: [];
       };
+      despesas_posto_auditoria: {
+        Row: AuditoriaDespesa;
+        Insert: {
+          id?: string;
+          despesa_id?: string | null;
+          acao: "criado" | "editado" | "apagado";
+          utilizador_id?: string | null;
+          utilizador_nome: string;
+          utilizador_username?: string | null;
+          dados_anteriores?: Record<string, unknown> | null;
+          dados_novos?: Record<string, unknown> | null;
+          created_at?: string;
+        };
+        Update: Partial<AuditoriaDespesa>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
+      app_apagar_despesa: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
+      };
       app_apagar_registo: {
         Args: { p_token: string; p_id: string };
         Returns: null;
@@ -180,6 +280,21 @@ export type Database = {
       app_criar_posto: {
         Args: { p_token: string; p_nome: string; p_responsavel?: string | null };
         Returns: Posto[];
+      };
+      app_guardar_despesa: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_posto_id: string;
+          p_data: string;
+          p_tipo_despesa: string;
+          p_numero_despesa: string;
+          p_valor: number;
+          p_fatura_paga?: boolean;
+          p_numero_fatura?: string | null;
+          p_observacoes?: string | null;
+        };
+        Returns: string;
       };
       app_guardar_registo: {
         Args: {
@@ -208,6 +323,10 @@ export type Database = {
       app_listar_postos: {
         Args: { p_token: string };
         Returns: Posto[];
+      };
+      app_listar_despesas: {
+        Args: { p_token: string; p_data: string };
+        Returns: DespesaRpc[];
       };
       app_listar_registos: {
         Args: { p_token: string; p_data: string };

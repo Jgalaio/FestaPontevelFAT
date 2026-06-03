@@ -10,6 +10,7 @@ import {
   LogOut,
   Pencil,
   Plus,
+  Receipt,
   RefreshCw,
   Save,
   Trash2,
@@ -20,13 +21,27 @@ import {
 } from "lucide-react";
 import { createBrowserSupabaseClient, hasSupabaseConfig } from "@/lib/supabase";
 import { formatCurrency, formatDateLabel, formatDateTimeLabel, parseMoney, todayISO } from "@/lib/format";
-import type { AppSession, Posto, Registo, RegistoForm, RegistoRow, RegistoRpc, Utilizador } from "@/lib/types";
+import type {
+  AppSession,
+  Despesa,
+  DespesaForm,
+  DespesaRow,
+  DespesaRpc,
+  Posto,
+  Registo,
+  RegistoForm,
+  RegistoRow,
+  RegistoRpc,
+  Utilizador
+} from "@/lib/types";
 
 type DemoStore = {
   postos: Posto[];
   registos: RegistoRow[];
+  despesas: DespesaRow[];
 };
 
+type EntryTab = "faturacao" | "despesas";
 type SideTab = "postos" | "utilizadores";
 
 type UserForm = {
@@ -41,6 +56,17 @@ type UserForm = {
 const STORAGE_KEY = "pontevel-faturacao-mvp";
 const DEMO_OPERATOR_KEY = "pontevel-faturacao-operador";
 const APP_SESSION_KEY = "pontevel-faturacao-sessao";
+
+const EXPENSE_TYPES = [
+  "Produtos",
+  "Serviços",
+  "Equipamento",
+  "Licenças",
+  "Segurança",
+  "Música",
+  "Limpeza",
+  "Outros"
+];
 
 const basePostos: Posto[] = [
   {
@@ -85,6 +111,20 @@ function emptyForm(date = todayISO()): RegistoForm {
   };
 }
 
+function emptyDespesaForm(date = todayISO()): DespesaForm {
+  return {
+    id: null,
+    postoId: "",
+    data: date,
+    tipoDespesa: EXPENSE_TYPES[0],
+    numeroDespesa: "",
+    valor: "",
+    faturaPaga: false,
+    numeroFatura: "",
+    observacoes: ""
+  };
+}
+
 function emptyUserForm(): UserForm {
   return {
     id: null,
@@ -98,23 +138,24 @@ function emptyUserForm(): UserForm {
 
 function readDemoStore(): DemoStore {
   if (typeof window === "undefined") {
-    return { postos: basePostos, registos: [] };
+    return { postos: basePostos, registos: [], despesas: [] };
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY);
 
   if (!raw) {
-    return { postos: basePostos, registos: [] };
+    return { postos: basePostos, registos: [], despesas: [] };
   }
 
   try {
-    const parsed = JSON.parse(raw) as DemoStore;
+    const parsed = JSON.parse(raw) as Partial<DemoStore>;
     return {
       postos: parsed.postos?.length ? parsed.postos : basePostos,
-      registos: parsed.registos ?? []
+      registos: parsed.registos ?? [],
+      despesas: parsed.despesas ?? []
     };
   } catch {
-    return { postos: basePostos, registos: [] };
+    return { postos: basePostos, registos: [], despesas: [] };
   }
 }
 
@@ -180,11 +221,36 @@ function attachPostos(registos: RegistoRow[], postos: Posto[]): Registo[] {
     });
 }
 
+function attachPostosToDespesas(despesas: DespesaRow[], postos: Posto[]): Despesa[] {
+  return despesas
+    .map((despesa) => ({
+      ...despesa,
+      postos: postos.find((posto) => posto.id === despesa.posto_id) ?? null
+    }))
+    .sort((a, b) => {
+      const byPosto = (a.postos?.nome ?? "").localeCompare(b.postos?.nome ?? "");
+      return byPosto || a.created_at.localeCompare(b.created_at);
+    });
+}
+
 function mapRegistoRpc(row: RegistoRpc): Registo {
   const { posto_nome: postoNome, posto_responsavel: postoResponsavel, ...registo } = row;
 
   return {
     ...registo,
+    postos: {
+      id: row.posto_id,
+      nome: postoNome ?? "Posto removido",
+      responsavel: postoResponsavel
+    }
+  };
+}
+
+function mapDespesaRpc(row: DespesaRpc): Despesa {
+  const { posto_nome: postoNome, posto_responsavel: postoResponsavel, ...despesa } = row;
+
+  return {
+    ...despesa,
     postos: {
       id: row.posto_id,
       nome: postoNome ?? "Posto removido",
@@ -204,16 +270,20 @@ export function BillingApp() {
   const [authPassword, setAuthPassword] = useState("");
   const [selectedDate, setSelectedDate] = useState(startDate);
   const [form, setForm] = useState<RegistoForm>(() => emptyForm(startDate));
+  const [despesaForm, setDespesaForm] = useState<DespesaForm>(() => emptyDespesaForm(startDate));
   const [postos, setPostos] = useState<Posto[]>([]);
   const [registos, setRegistos] = useState<Registo[]>([]);
+  const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [utilizadores, setUtilizadores] = useState<Utilizador[]>([]);
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
+  const [entryTab, setEntryTab] = useState<EntryTab>("faturacao");
   const [sideTab, setSideTab] = useState<SideTab>("postos");
   const [newPostoName, setNewPostoName] = useState("");
   const [newPostoResponsavel, setNewPostoResponsavel] = useState("");
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [expenseSaving, setExpenseSaving] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -235,6 +305,12 @@ export function BillingApp() {
       { dinheiro: 0, multibanco: 0, mbway: 0, total: 0 }
     );
   }, [registos]);
+
+  const despesasTotal = useMemo(() => {
+    return despesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
+  }, [despesas]);
+
+  const saldoDia = totals.total - despesasTotal;
 
   const postosRegistados = useMemo(
     () => new Set(registos.map((registo) => registo.posto_id)).size,
@@ -296,6 +372,9 @@ export function BillingApp() {
       writeDemoStore(store);
       setPostos(store.postos);
       setRegistos(attachPostos(store.registos.filter((registo) => registo.data === selectedDate), store.postos));
+      setDespesas(
+        attachPostosToDespesas(store.despesas.filter((despesa) => despesa.data === selectedDate), store.postos)
+      );
       return;
     }
 
@@ -305,9 +384,10 @@ export function BillingApp() {
 
     setLoading(true);
 
-    const [postosResult, registosResult] = await Promise.all([
+    const [postosResult, registosResult, despesasResult] = await Promise.all([
       supabase.rpc("app_listar_postos", { p_token: sessionToken }),
-      supabase.rpc("app_listar_registos", { p_token: sessionToken, p_data: selectedDate })
+      supabase.rpc("app_listar_registos", { p_token: sessionToken, p_data: selectedDate }),
+      supabase.rpc("app_listar_despesas", { p_token: sessionToken, p_data: selectedDate })
     ]);
 
     setLoading(false);
@@ -322,8 +402,14 @@ export function BillingApp() {
       return;
     }
 
+    if (despesasResult.error) {
+      setError(despesasResult.error.message);
+      return;
+    }
+
     setPostos(postosResult.data ?? []);
     setRegistos((registosResult.data ?? []).map(mapRegistoRpc));
+    setDespesas((despesasResult.data ?? []).map(mapDespesaRpc));
   }, [isDemoMode, selectedDate, sessionToken, supabase]);
 
   useEffect(() => {
@@ -399,6 +485,12 @@ export function BillingApp() {
     }
   }, [activePostos, form.postoId]);
 
+  useEffect(() => {
+    if (!despesaForm.postoId && activePostos[0]) {
+      setDespesaForm((current) => ({ ...current, postoId: activePostos[0].id }));
+    }
+  }, [activePostos, despesaForm.postoId]);
+
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -437,6 +529,7 @@ export function BillingApp() {
     clearStoredSession();
     setAppSession(null);
     setRegistos([]);
+    setDespesas([]);
     setPostos([]);
     setUtilizadores([]);
   }
@@ -444,6 +537,7 @@ export function BillingApp() {
   function handleDateChange(value: string) {
     setSelectedDate(value);
     setForm((current) => ({ ...current, data: value }));
+    setDespesaForm((current) => ({ ...current, data: value }));
   }
 
   async function handleAddPosto(event: FormEvent<HTMLFormElement>) {
@@ -634,6 +728,172 @@ export function BillingApp() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function handleSaveDespesa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setExpenseSaving(true);
+    setError("");
+    setNotice("");
+
+    if (!despesaForm.postoId) {
+      setExpenseSaving(false);
+      setError("Escolhe um posto para a despesa.");
+      return;
+    }
+
+    if (!despesaForm.tipoDespesa.trim()) {
+      setExpenseSaving(false);
+      setError("Escolhe o tipo de despesa.");
+      return;
+    }
+
+    if (!despesaForm.numeroDespesa.trim()) {
+      setExpenseSaving(false);
+      setError("Indica o número da despesa.");
+      return;
+    }
+
+    if (despesaForm.faturaPaga && !despesaForm.numeroFatura.trim()) {
+      setExpenseSaving(false);
+      setError("Indica o número da fatura paga.");
+      return;
+    }
+
+    const valor = parseMoney(despesaForm.valor);
+
+    if (valor < 0) {
+      setExpenseSaving(false);
+      setError("O valor da despesa não pode ser negativo.");
+      return;
+    }
+
+    const payload = {
+      id: despesaForm.id,
+      posto_id: despesaForm.postoId,
+      data: despesaForm.data,
+      tipo_despesa: despesaForm.tipoDespesa.trim(),
+      numero_despesa: despesaForm.numeroDespesa.trim(),
+      valor,
+      fatura_paga: despesaForm.faturaPaga,
+      numero_fatura: despesaForm.faturaPaga ? despesaForm.numeroFatura.trim() || null : null,
+      observacoes: despesaForm.observacoes.trim() || null
+    };
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const existingIndex = payload.id
+        ? store.despesas.findIndex((despesa) => despesa.id === payload.id)
+        : -1;
+      const existingDespesa = existingIndex >= 0 ? store.despesas[existingIndex] : null;
+      const now = new Date().toISOString();
+      const nextDespesa: DespesaRow = {
+        ...payload,
+        id: existingDespesa?.id ?? makeId("despesa"),
+        created_at: existingDespesa?.created_at ?? now,
+        updated_at: now,
+        criado_por_id: existingDespesa?.criado_por_id ?? null,
+        criado_por_nome: existingDespesa?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: null,
+        atualizado_por_nome: currentUserName
+      };
+
+      const nextDespesas =
+        existingIndex >= 0
+          ? store.despesas.map((despesa, index) => (index === existingIndex ? nextDespesa : despesa))
+          : [...store.despesas, nextDespesa];
+
+      writeDemoStore({ ...store, despesas: nextDespesas });
+      setNotice("Despesa guardada.");
+      setDespesaForm((current) => ({ ...emptyDespesaForm(current.data), postoId: current.postoId }));
+      setExpenseSaving(false);
+      await loadData();
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setExpenseSaving(false);
+      return;
+    }
+
+    const { error: saveError } = await supabase.rpc("app_guardar_despesa", {
+      p_token: sessionToken,
+      p_id: payload.id,
+      p_posto_id: payload.posto_id,
+      p_data: payload.data,
+      p_tipo_despesa: payload.tipo_despesa,
+      p_numero_despesa: payload.numero_despesa,
+      p_valor: payload.valor,
+      p_fatura_paga: payload.fatura_paga,
+      p_numero_fatura: payload.numero_fatura,
+      p_observacoes: payload.observacoes
+    });
+
+    setExpenseSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setNotice("Despesa guardada.");
+    setDespesaForm((current) => ({ ...emptyDespesaForm(current.data), postoId: current.postoId }));
+    await loadData();
+  }
+
+  async function handleDeleteDespesa(id: string) {
+    const shouldDelete = window.confirm("Apagar esta despesa?");
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      writeDemoStore({
+        ...store,
+        despesas: store.despesas.filter((despesa) => despesa.id !== id)
+      });
+      setNotice("Despesa apagada.");
+      await loadData();
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_despesa", {
+      p_token: sessionToken,
+      p_id: id
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setNotice("Despesa apagada.");
+    await loadData();
+  }
+
+  function handleEditDespesa(despesa: Despesa) {
+    setEntryTab("despesas");
+    setDespesaForm({
+      id: despesa.id,
+      postoId: despesa.posto_id,
+      data: despesa.data,
+      tipoDespesa: despesa.tipo_despesa,
+      numeroDespesa: despesa.numero_despesa,
+      valor: String(Number(despesa.valor).toFixed(2)),
+      faturaPaga: despesa.fatura_paga,
+      numeroFatura: despesa.numero_fatura ?? "",
+      observacoes: despesa.observacoes ?? ""
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -801,6 +1061,14 @@ export function BillingApp() {
           <small>{formatDateLabel(selectedDate)}</small>
         </article>
         <article className="metric">
+          <span>Despesas</span>
+          <strong>{formatCurrency(despesasTotal)}</strong>
+        </article>
+        <article className="metric">
+          <span>Saldo</span>
+          <strong>{formatCurrency(saldoDia)}</strong>
+        </article>
+        <article className="metric">
           <span>Dinheiro</span>
           <strong>{formatCurrency(totals.dinheiro)}</strong>
         </article>
@@ -827,88 +1095,239 @@ export function BillingApp() {
 
       <div className="workspace-grid">
         <section className="panel entry-panel">
+          <div className="side-tabs entry-tabs" role="tablist" aria-label="Tipo de registo">
+            <button
+              className={`tab-button ${entryTab === "faturacao" ? "active" : ""}`}
+              type="button"
+              onClick={() => setEntryTab("faturacao")}
+            >
+              <Euro size={18} aria-hidden="true" />
+              Faturação
+            </button>
+            <button
+              className={`tab-button ${entryTab === "despesas" ? "active" : ""}`}
+              type="button"
+              onClick={() => setEntryTab("despesas")}
+            >
+              <Receipt size={18} aria-hidden="true" />
+              Despesas
+            </button>
+          </div>
+
           <div className="panel-heading">
             <div className="heading-icon">
-              <Euro size={20} aria-hidden="true" />
+              {entryTab === "faturacao" ? (
+                <Euro size={20} aria-hidden="true" />
+              ) : (
+                <Receipt size={20} aria-hidden="true" />
+              )}
             </div>
             <div>
               <p className="eyebrow">Registo</p>
-              <h2>Valores por posto</h2>
+              <h2>{entryTab === "faturacao" ? "Valores por posto" : "Despesas por posto"}</h2>
             </div>
           </div>
 
-          <form className="form-grid" onSubmit={handleSaveRegisto}>
-            <label>
-              Posto
-              <select
-                value={form.postoId}
-                onChange={(event) => setForm((current) => ({ ...current, postoId: event.target.value }))}
-                required
-              >
-                <option value="">Escolher posto</option>
-                {activePostos.map((posto) => (
-                  <option key={posto.id} value={posto.id}>
-                    {posto.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {entryTab === "faturacao" ? (
+            <form className="form-grid" onSubmit={handleSaveRegisto}>
+              <label>
+                Posto
+                <select
+                  value={form.postoId}
+                  onChange={(event) => setForm((current) => ({ ...current, postoId: event.target.value }))}
+                  required
+                >
+                  <option value="">Escolher posto</option>
+                  {activePostos.map((posto) => (
+                    <option key={posto.id} value={posto.id}>
+                      {posto.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <label>
-              Data
-              <input type="date" value={form.data} onChange={(event) => handleDateChange(event.target.value)} />
-            </label>
+              <label>
+                Data
+                <input type="date" value={form.data} onChange={(event) => handleDateChange(event.target.value)} />
+              </label>
 
-            <label>
-              Dinheiro
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                value={form.dinheiro}
-                onChange={(event) => setForm((current) => ({ ...current, dinheiro: event.target.value }))}
-              />
-            </label>
+              <label>
+                Dinheiro
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={form.dinheiro}
+                  onChange={(event) => setForm((current) => ({ ...current, dinheiro: event.target.value }))}
+                />
+              </label>
 
-            <label>
-              Multibanco
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                value={form.multibanco}
-                onChange={(event) => setForm((current) => ({ ...current, multibanco: event.target.value }))}
-              />
-            </label>
+              <label>
+                Multibanco
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={form.multibanco}
+                  onChange={(event) => setForm((current) => ({ ...current, multibanco: event.target.value }))}
+                />
+              </label>
 
-            <label>
-              MB Way
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                value={form.mbway}
-                onChange={(event) => setForm((current) => ({ ...current, mbway: event.target.value }))}
-              />
-            </label>
+              <label>
+                MB Way
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={form.mbway}
+                  onChange={(event) => setForm((current) => ({ ...current, mbway: event.target.value }))}
+                />
+              </label>
 
-            <label className="wide-field">
-              Observações
-              <textarea
-                value={form.observacoes}
-                onChange={(event) => setForm((current) => ({ ...current, observacoes: event.target.value }))}
-                rows={3}
-              />
-            </label>
+              <label className="wide-field">
+                Observações
+                <textarea
+                  value={form.observacoes}
+                  onChange={(event) => setForm((current) => ({ ...current, observacoes: event.target.value }))}
+                  rows={3}
+                />
+              </label>
 
-            <button className="primary-button wide-field" type="submit" disabled={saving || !activePostos.length}>
-              <Save size={18} aria-hidden="true" />
-              {saving ? "A guardar" : "Guardar registo"}
-            </button>
-          </form>
+              <button className="primary-button wide-field" type="submit" disabled={saving || !activePostos.length}>
+                <Save size={18} aria-hidden="true" />
+                {saving ? "A guardar" : "Guardar registo"}
+              </button>
+            </form>
+          ) : (
+            <form className="form-grid" onSubmit={handleSaveDespesa}>
+              <label>
+                Posto
+                <select
+                  value={despesaForm.postoId}
+                  onChange={(event) => setDespesaForm((current) => ({ ...current, postoId: event.target.value }))}
+                  required
+                >
+                  <option value="">Escolher posto</option>
+                  {activePostos.map((posto) => (
+                    <option key={posto.id} value={posto.id}>
+                      {posto.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Data
+                <input
+                  type="date"
+                  value={despesaForm.data}
+                  onChange={(event) => handleDateChange(event.target.value)}
+                />
+              </label>
+
+              <label>
+                Tipo de despesa
+                <select
+                  value={despesaForm.tipoDespesa}
+                  onChange={(event) =>
+                    setDespesaForm((current) => ({ ...current, tipoDespesa: event.target.value }))
+                  }
+                  required
+                >
+                  {EXPENSE_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Nº despesa
+                <input
+                  value={despesaForm.numeroDespesa}
+                  onChange={(event) =>
+                    setDespesaForm((current) => ({ ...current, numeroDespesa: event.target.value }))
+                  }
+                  placeholder="Ex.: D-001"
+                  required
+                />
+              </label>
+
+              <label>
+                Valor
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={despesaForm.valor}
+                  onChange={(event) => setDespesaForm((current) => ({ ...current, valor: event.target.value }))}
+                />
+              </label>
+
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={despesaForm.faturaPaga}
+                  onChange={(event) =>
+                    setDespesaForm((current) => ({
+                      ...current,
+                      faturaPaga: event.target.checked,
+                      numeroFatura: event.target.checked ? current.numeroFatura : ""
+                    }))
+                  }
+                />
+                Fatura paga
+              </label>
+
+              <label>
+                Nº fatura
+                <input
+                  value={despesaForm.numeroFatura}
+                  onChange={(event) =>
+                    setDespesaForm((current) => ({ ...current, numeroFatura: event.target.value }))
+                  }
+                  placeholder="Ex.: FT 2026/001"
+                  disabled={!despesaForm.faturaPaga}
+                  required={despesaForm.faturaPaga}
+                />
+              </label>
+
+              <label className="wide-field">
+                Observações
+                <textarea
+                  value={despesaForm.observacoes}
+                  onChange={(event) =>
+                    setDespesaForm((current) => ({ ...current, observacoes: event.target.value }))
+                  }
+                  rows={3}
+                />
+              </label>
+
+              <div className="form-actions wide-field">
+                <button className="primary-button" type="submit" disabled={expenseSaving || !activePostos.length}>
+                  <Save size={18} aria-hidden="true" />
+                  {expenseSaving ? "A guardar" : despesaForm.id ? "Guardar despesa" : "Criar despesa"}
+                </button>
+                {despesaForm.id ? (
+                  <button
+                    className="icon-text-button"
+                    type="button"
+                    onClick={() =>
+                      setDespesaForm((current) => ({ ...emptyDespesaForm(current.data), postoId: current.postoId }))
+                    }
+                  >
+                    <X size={18} aria-hidden="true" />
+                    Cancelar
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          )}
         </section>
 
         <section className="panel side-panel">
@@ -1170,6 +1589,84 @@ export function BillingApp() {
           </div>
         ) : (
           <div className="empty-state">Sem registos para este dia.</div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading table-heading">
+          <div>
+            <p className="eyebrow">Despesas</p>
+            <h2>{formatCurrency(despesasTotal)}</h2>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="empty-state">A carregar despesas.</div>
+        ) : despesas.length ? (
+          <div className="table-wrap">
+            <table className="expenses-table">
+              <thead>
+                <tr>
+                  <th>Posto</th>
+                  <th>Tipo</th>
+                  <th>Nº despesa</th>
+                  <th>Valor</th>
+                  <th>Fatura</th>
+                  <th>Alterado por</th>
+                  <th>Observações</th>
+                  <th aria-label="Ações" />
+                </tr>
+              </thead>
+              <tbody>
+                {despesas.map((despesa) => (
+                  <tr key={despesa.id}>
+                    <td>
+                      <strong>{despesa.postos?.nome ?? "Posto removido"}</strong>
+                      <span>{despesa.postos?.responsavel ?? ""}</span>
+                    </td>
+                    <td>{despesa.tipo_despesa}</td>
+                    <td>{despesa.numero_despesa}</td>
+                    <td>
+                      <strong>{formatCurrency(Number(despesa.valor))}</strong>
+                    </td>
+                    <td className="audit-cell">
+                      <strong>{despesa.fatura_paga ? "Paga" : "Por pagar"}</strong>
+                      <span>{despesa.numero_fatura ?? ""}</span>
+                    </td>
+                    <td className="audit-cell">
+                      <strong>{despesa.atualizado_por_nome ?? despesa.criado_por_nome ?? "Sem utilizador"}</strong>
+                      <span>{formatDateTimeLabel(despesa.updated_at)}</span>
+                    </td>
+                    <td>{despesa.observacoes || ""}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          className="icon-button"
+                          type="button"
+                          title="Editar despesa"
+                          aria-label="Editar despesa"
+                          onClick={() => handleEditDespesa(despesa)}
+                        >
+                          <Pencil size={17} aria-hidden="true" />
+                        </button>
+                        <button
+                          className="icon-button danger"
+                          type="button"
+                          title="Apagar despesa"
+                          aria-label="Apagar despesa"
+                          onClick={() => void handleDeleteDespesa(despesa.id)}
+                        >
+                          <Trash2 size={17} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-state">Sem despesas para este dia.</div>
         )}
       </section>
     </main>
