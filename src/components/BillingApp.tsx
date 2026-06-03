@@ -333,6 +333,7 @@ export function BillingApp() {
       return;
     }
 
+    const client = supabase;
     const storedSession = readStoredSession();
 
     if (!storedSession) {
@@ -342,7 +343,7 @@ export function BillingApp() {
 
     async function validateStoredSession() {
       try {
-        const { data, error: sessionError } = await supabase.rpc("app_utilizador_por_token", {
+        const { data, error: sessionError } = await client.rpc("app_utilizador_por_token", {
           p_token: storedSession.token
         });
 
