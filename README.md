@@ -25,14 +25,16 @@ Sem variáveis Supabase, a app abre em modo de demonstração e guarda dados no 
 2. Abrir `SQL Editor`.
 3. Executar o ficheiro `supabase/schema.sql`.
 4. Em `Authentication > Providers`, confirmar que o login por email está ativo.
-5. Copiar `Project URL` e `anon public key`.
+5. Copiar `Project URL` e a `publishable key`.
 
 Depois preencher:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 ```
+
+Se o teu projeto Supabase mostrar a chave antiga `anon public key`, podes usar `NEXT_PUBLIC_SUPABASE_ANON_KEY` em vez de `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 
 As regras RLS do MVP permitem leitura e escrita a utilizadores autenticados. Para produção, o próximo passo natural é separar permissões por papel, por exemplo `tesouraria`, `responsavel_posto` e `consulta`.
 
