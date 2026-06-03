@@ -105,6 +105,7 @@ create or replace function public.app_token_hash(p_token text)
 returns text
 language sql
 immutable
+set search_path = public, extensions
 as $$
   select encode(digest(coalesce(p_token, ''), 'sha256'), 'hex');
 $$;
@@ -118,7 +119,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   return query
@@ -141,7 +142,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   return query
@@ -166,7 +167,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   found_user public.utilizadores%rowtype;
@@ -208,7 +209,7 @@ create or replace function public.app_logout(p_token text)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   delete from public.utilizador_sessoes s
@@ -226,7 +227,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   return query
@@ -244,7 +245,7 @@ create or replace function public.app_listar_postos(p_token text)
 returns setof public.postos
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor record;
@@ -266,7 +267,7 @@ create or replace function public.app_criar_posto(
 returns setof public.postos
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor record;
@@ -300,7 +301,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor record;
@@ -343,7 +344,7 @@ create or replace function public.app_guardar_registo(
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor record;
@@ -452,7 +453,7 @@ create or replace function public.app_apagar_registo(p_token text, p_id uuid)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor record;
@@ -506,7 +507,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor record;
@@ -544,7 +545,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   actor record;

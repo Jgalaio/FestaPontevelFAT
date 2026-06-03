@@ -9,7 +9,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   found_user public.utilizadores%rowtype;
@@ -51,7 +51,7 @@ create or replace function public.app_logout(p_token text)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   delete from public.utilizador_sessoes s
