@@ -194,8 +194,8 @@ declare
   raw_token text;
   session_expires_at timestamptz := now() + interval '18 hours';
 begin
-  delete from public.utilizador_sessoes
-  where expires_at <= now();
+  delete from public.utilizador_sessoes s
+  where s.expires_at <= now();
 
   select *
   into found_user
@@ -232,8 +232,8 @@ security definer
 set search_path = public
 as $$
 begin
-  delete from public.utilizador_sessoes
-  where token_hash = public.app_token_hash(p_token);
+  delete from public.utilizador_sessoes s
+  where s.token_hash = public.app_token_hash(p_token);
 end;
 $$;
 
