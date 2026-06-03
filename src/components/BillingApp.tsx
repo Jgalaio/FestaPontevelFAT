@@ -341,10 +341,12 @@ export function BillingApp() {
       return;
     }
 
+    const storedToken = storedSession.token;
+
     async function validateStoredSession() {
       try {
         const { data, error: sessionError } = await client.rpc("app_utilizador_por_token", {
-          p_token: storedSession.token
+          p_token: storedToken
         });
 
         if (sessionError || !data?.[0]) {
@@ -354,7 +356,7 @@ export function BillingApp() {
         }
 
         const validatedSession: AppSession = {
-          token: storedSession.token,
+          token: storedToken,
           utilizador_id: data[0].utilizador_id,
           username: data[0].username,
           nome: data[0].nome,
