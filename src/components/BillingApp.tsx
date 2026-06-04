@@ -1871,8 +1871,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       <main className="app-shell auth-shell">
         <section className="auth-panel">
           <div>
-            <p className="eyebrow">Festa de Pontével</p>
-            <h1>Entrada da equipa</h1>
+            <p className="eyebrow">Entrada da equipa</p>
+            <h1>FestaSoft</h1>
+            <p className="auth-credit">Criado por João Galaio</p>
           </div>
 
           <form className="auth-form" onSubmit={handleLogin}>
