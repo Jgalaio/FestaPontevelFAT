@@ -63,7 +63,7 @@ Essa atualização cria:
 - imagem opcional da fatura em `despesas_posto`
 - `agente_config` e `pagamentos_agente`, com valor necessário, valores-base e entregas ao agente
 - proteção para apagar faturação/despesas apenas com papel `admin`
-- `novadis_config` e `novadis_barris`, com valor por barril, tara e histórico de barris recebidos
+- `novadis_config` e `novadis_barris`, com valor unitário/tara por tipo e histórico de registos recebidos
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
 - funções RPC para login, faturação, despesas, pagamentos, dias, postos e gestão de utilizadores
@@ -102,8 +102,8 @@ git push -u origin main
 - `despesas_posto`: posto, data, tipo, número automático, valor, FAT com NIF, tipo de pagamento, estado/número/imagem da fatura
 - `agente_config`: valor necessário ao agente, Eventos Anual, Patrocínios e Peditório para o Pag.Agente
 - `pagamentos_agente`: entregas ao agente com valor, data/hora e utilizador
-- `novadis_config`: valor por barril e valor de tara, editáveis apenas por `admin`
-- `novadis_barris`: barris de imperial recebidos, quantidade, data/hora e utilizador
+- `novadis_config`: valor unitário e valor de tara para Imperial, Cidra, Sangria e Garrafas de CO2, editáveis apenas por `admin`
+- `novadis_barris`: registos Novadis recebidos, tipo, quantidade, data/hora e utilizador
 - `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia
 

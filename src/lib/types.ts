@@ -109,10 +109,18 @@ export type PagamentoAgente = {
   created_at: string;
 };
 
+export type NovadisTipo = "imperial" | "cidra" | "sangria" | "co2";
+
 export type NovadisConfig = {
   id: boolean;
-  valor_barril: number;
-  valor_tara: number;
+  imperial_valor_unitario: number;
+  imperial_valor_tara: number;
+  cidra_valor_unitario: number;
+  cidra_valor_tara: number;
+  sangria_valor_unitario: number;
+  sangria_valor_tara: number;
+  co2_valor_unitario: number;
+  co2_valor_tara: number;
   atualizado_por_id: string | null;
   atualizado_por_nome: string | null;
   created_at: string;
@@ -121,6 +129,7 @@ export type NovadisConfig = {
 
 export type NovadisBarril = {
   id: string;
+  tipo: NovadisTipo;
   quantidade: number;
   criado_por_id: string | null;
   criado_por_nome: string;
@@ -377,8 +386,14 @@ export type Database = {
         Row: NovadisConfig;
         Insert: {
           id?: boolean;
-          valor_barril?: number;
-          valor_tara?: number;
+          imperial_valor_unitario?: number;
+          imperial_valor_tara?: number;
+          cidra_valor_unitario?: number;
+          cidra_valor_tara?: number;
+          sangria_valor_unitario?: number;
+          sangria_valor_tara?: number;
+          co2_valor_unitario?: number;
+          co2_valor_tara?: number;
           atualizado_por_id?: string | null;
           atualizado_por_nome?: string | null;
           created_at?: string;
@@ -391,6 +406,7 @@ export type Database = {
         Row: NovadisBarril;
         Insert: {
           id?: string;
+          tipo?: NovadisTipo;
           quantidade: number;
           criado_por_id?: string | null;
           criado_por_nome: string;
@@ -580,8 +596,14 @@ export type Database = {
       app_guardar_novadis_config: {
         Args: {
           p_token: string;
-          p_valor_barril?: number;
-          p_valor_tara?: number;
+          p_imperial_valor_unitario?: number;
+          p_imperial_valor_tara?: number;
+          p_cidra_valor_unitario?: number;
+          p_cidra_valor_tara?: number;
+          p_sangria_valor_unitario?: number;
+          p_sangria_valor_tara?: number;
+          p_co2_valor_unitario?: number;
+          p_co2_valor_tara?: number;
         };
         Returns: NovadisConfig[];
       };
@@ -590,7 +612,7 @@ export type Database = {
         Returns: NovadisBarril[];
       };
       app_registar_novadis_barris: {
-        Args: { p_token: string; p_quantidade: number };
+        Args: { p_token: string; p_tipo: NovadisTipo; p_quantidade: number };
         Returns: NovadisBarril[];
       };
       app_login: {

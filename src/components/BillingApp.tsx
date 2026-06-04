@@ -43,6 +43,7 @@ import type {
   RegistoRpc,
   NovadisBarril,
   NovadisConfig,
+  NovadisTipo,
   PagamentoAgente,
   TipoDespesa,
   Utilizador
@@ -108,13 +109,28 @@ type PagamentoAgenteForm = {
 };
 
 type NovadisConfigForm = {
-  valorBarril: string;
-  valorTara: string;
+  imperialValorUnitario: string;
+  imperialValorTara: string;
+  cidraValorUnitario: string;
+  cidraValorTara: string;
+  sangriaValorUnitario: string;
+  sangriaValorTara: string;
+  co2ValorUnitario: string;
+  co2ValorTara: string;
 };
 
 type NovadisBarrilForm = {
+  tipo: NovadisTipo;
   quantidade: string;
 };
+
+type NovadisValorKey =
+  | "imperial_valor_unitario"
+  | "cidra_valor_unitario"
+  | "sangria_valor_unitario"
+  | "co2_valor_unitario";
+type NovadisTaraKey = "imperial_valor_tara" | "cidra_valor_tara" | "sangria_valor_tara" | "co2_valor_tara";
+type NovadisConfigFormKey = keyof NovadisConfigForm;
 
 const STORAGE_KEY = "pontevel-faturacao-mvp";
 const DEMO_OPERATOR_KEY = "pontevel-faturacao-operador";
@@ -132,6 +148,48 @@ const EXPENSE_TYPES = [
   "Música",
   "Limpeza",
   "Outros"
+];
+
+const NOVADIS_TIPOS: {
+  tipo: NovadisTipo;
+  label: string;
+  valorKey: NovadisValorKey;
+  taraKey: NovadisTaraKey;
+  valorFormKey: NovadisConfigFormKey;
+  taraFormKey: NovadisConfigFormKey;
+}[] = [
+  {
+    tipo: "imperial",
+    label: "Imperial",
+    valorKey: "imperial_valor_unitario",
+    taraKey: "imperial_valor_tara",
+    valorFormKey: "imperialValorUnitario",
+    taraFormKey: "imperialValorTara"
+  },
+  {
+    tipo: "cidra",
+    label: "Cidra",
+    valorKey: "cidra_valor_unitario",
+    taraKey: "cidra_valor_tara",
+    valorFormKey: "cidraValorUnitario",
+    taraFormKey: "cidraValorTara"
+  },
+  {
+    tipo: "sangria",
+    label: "Sangria",
+    valorKey: "sangria_valor_unitario",
+    taraKey: "sangria_valor_tara",
+    valorFormKey: "sangriaValorUnitario",
+    taraFormKey: "sangriaValorTara"
+  },
+  {
+    tipo: "co2",
+    label: "Garrafas de CO2",
+    valorKey: "co2_valor_unitario",
+    taraKey: "co2_valor_tara",
+    valorFormKey: "co2ValorUnitario",
+    taraFormKey: "co2ValorTara"
+  }
 ];
 
 const baseTiposDespesa: TipoDespesa[] = EXPENSE_TYPES.map((nome, index) => ({
@@ -202,8 +260,14 @@ const baseAgenteConfig: AgenteConfig = {
 
 const baseNovadisConfig: NovadisConfig = {
   id: true,
-  valor_barril: 0,
-  valor_tara: 0,
+  imperial_valor_unitario: 0,
+  imperial_valor_tara: 0,
+  cidra_valor_unitario: 0,
+  cidra_valor_tara: 0,
+  sangria_valor_unitario: 0,
+  sangria_valor_tara: 0,
+  co2_valor_unitario: 0,
+  co2_valor_tara: 0,
   atualizado_por_id: null,
   atualizado_por_nome: "Sistema",
   created_at: "2026-06-03T00:00:00.000Z",
@@ -222,11 +286,24 @@ function normalizeAgenteConfig(config?: Partial<AgenteConfig> | null): AgenteCon
 }
 
 function normalizeNovadisConfig(config?: Partial<NovadisConfig> | null): NovadisConfig {
+  const legacyConfig = config as
+    | (Partial<NovadisConfig> & { valor_barril?: number; valor_tara?: number })
+    | null
+    | undefined;
+  const legacyValorUnitario = Number(legacyConfig?.valor_barril ?? 0);
+  const legacyValorTara = Number(legacyConfig?.valor_tara ?? 0);
+
   return {
     ...baseNovadisConfig,
     ...config,
-    valor_barril: Number(config?.valor_barril ?? 0),
-    valor_tara: Number(config?.valor_tara ?? 0)
+    imperial_valor_unitario: Number(config?.imperial_valor_unitario ?? legacyValorUnitario),
+    imperial_valor_tara: Number(config?.imperial_valor_tara ?? legacyValorTara),
+    cidra_valor_unitario: Number(config?.cidra_valor_unitario ?? 0),
+    cidra_valor_tara: Number(config?.cidra_valor_tara ?? 0),
+    sangria_valor_unitario: Number(config?.sangria_valor_unitario ?? 0),
+    sangria_valor_tara: Number(config?.sangria_valor_tara ?? 0),
+    co2_valor_unitario: Number(config?.co2_valor_unitario ?? 0),
+    co2_valor_tara: Number(config?.co2_valor_tara ?? 0)
   };
 }
 
@@ -343,14 +420,49 @@ function emptyPagamentoAgenteForm(): PagamentoAgenteForm {
 
 function novadisConfigToForm(config: NovadisConfig): NovadisConfigForm {
   return {
-    valorBarril: String(Number(config.valor_barril).toFixed(2)),
-    valorTara: String(Number(config.valor_tara).toFixed(2))
+    imperialValorUnitario: String(Number(config.imperial_valor_unitario).toFixed(2)),
+    imperialValorTara: String(Number(config.imperial_valor_tara).toFixed(2)),
+    cidraValorUnitario: String(Number(config.cidra_valor_unitario).toFixed(2)),
+    cidraValorTara: String(Number(config.cidra_valor_tara).toFixed(2)),
+    sangriaValorUnitario: String(Number(config.sangria_valor_unitario).toFixed(2)),
+    sangriaValorTara: String(Number(config.sangria_valor_tara).toFixed(2)),
+    co2ValorUnitario: String(Number(config.co2_valor_unitario).toFixed(2)),
+    co2ValorTara: String(Number(config.co2_valor_tara).toFixed(2))
   };
 }
 
 function emptyNovadisBarrilForm(): NovadisBarrilForm {
   return {
+    tipo: "imperial",
     quantidade: ""
+  };
+}
+
+function normalizeNovadisTipo(value: string | null | undefined): NovadisTipo {
+  return NOVADIS_TIPOS.some((item) => item.tipo === value) ? (value as NovadisTipo) : "imperial";
+}
+
+function getNovadisTipoLabel(value: string | null | undefined) {
+  const tipo = normalizeNovadisTipo(value);
+  return NOVADIS_TIPOS.find((item) => item.tipo === tipo)?.label ?? "Imperial";
+}
+
+function getNovadisUnitLabel(value: string | null | undefined, quantidade: number) {
+  const tipo = normalizeNovadisTipo(value);
+
+  if (tipo === "co2") {
+    return quantidade === 1 ? "garrafa" : "garrafas";
+  }
+
+  return quantidade === 1 ? "barril" : "barris";
+}
+
+function normalizeNovadisBarril(barril: NovadisBarril): NovadisBarril {
+  const rawBarril = barril as NovadisBarril & { tipo?: string | null };
+
+  return {
+    ...barril,
+    tipo: normalizeNovadisTipo(rawBarril.tipo)
   };
 }
 
@@ -517,7 +629,7 @@ function readDemoStore(): DemoStore {
       registos,
       despesas,
       pagamentosAgente: parsed.pagamentosAgente ?? [],
-      novadisBarris: parsed.novadisBarris ?? [],
+      novadisBarris: (parsed.novadisBarris ?? []).map(normalizeNovadisBarril),
       tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
@@ -972,9 +1084,23 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const overviewTotalApresentado = overviewOnlyFestaTotal ? dailyTotals.total : overviewTotalComExtras;
   const overviewSaldoReal = overviewTotalComExtras - dailyDespesasTotal - agenteTotalEntregue;
   const overviewSaldoApresentado = overviewOnlyFestaSaldo ? dailySaldo : overviewSaldoReal;
-  const novadisTotalBarris = novadisBarris.reduce((acc, barril) => acc + Number(barril.quantidade), 0);
-  const novadisValorBarris = novadisTotalBarris * Number(novadisConfig.valor_barril);
-  const novadisValorTara = novadisTotalBarris * Number(novadisConfig.valor_tara);
+  const novadisPorTipo = NOVADIS_TIPOS.map((item) => {
+    const quantidade = novadisBarris
+      .filter((barril) => normalizeNovadisTipo(barril.tipo) === item.tipo)
+      .reduce((acc, barril) => acc + Number(barril.quantidade), 0);
+    const valorUnitario = Number(novadisConfig[item.valorKey]);
+    const valorTara = Number(novadisConfig[item.taraKey]);
+
+    return {
+      ...item,
+      quantidade,
+      valorTotal: quantidade * valorUnitario,
+      taraTotal: quantidade * valorTara
+    };
+  });
+  const novadisTotalBarris = novadisPorTipo.reduce((acc, item) => acc + item.quantidade, 0);
+  const novadisValorBarris = novadisPorTipo.reduce((acc, item) => acc + item.valorTotal, 0);
+  const novadisValorTara = novadisPorTipo.reduce((acc, item) => acc + item.taraTotal, 0);
   const novadisDiferenca = novadisValorBarris - novadisValorTara;
 
   const currentUserName = appSession?.nome ?? demoOperator;
@@ -1074,7 +1200,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
       setNovadisConfig(nextConfig);
       setNovadisConfigForm(novadisConfigToForm(nextConfig));
-      setNovadisBarris(store.novadisBarris ?? []);
+      setNovadisBarris((store.novadisBarris ?? []).map(normalizeNovadisBarril));
       return;
     }
 
@@ -1106,7 +1232,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setNovadisConfig(nextConfig);
     setNovadisConfigForm(novadisConfigToForm(nextConfig));
-    setNovadisBarris(barrisResult.data ?? []);
+    setNovadisBarris((barrisResult.data ?? []).map(normalizeNovadisBarril));
   }, [isDemoMode, sessionToken, supabase]);
 
   const loadData = useCallback(async () => {
@@ -2393,10 +2519,18 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    const valorBarril = parseMoney(novadisConfigForm.valorBarril);
-    const valorTara = parseMoney(novadisConfigForm.valorTara);
+    const nextValues = {
+      imperial_valor_unitario: parseMoney(novadisConfigForm.imperialValorUnitario),
+      imperial_valor_tara: parseMoney(novadisConfigForm.imperialValorTara),
+      cidra_valor_unitario: parseMoney(novadisConfigForm.cidraValorUnitario),
+      cidra_valor_tara: parseMoney(novadisConfigForm.cidraValorTara),
+      sangria_valor_unitario: parseMoney(novadisConfigForm.sangriaValorUnitario),
+      sangria_valor_tara: parseMoney(novadisConfigForm.sangriaValorTara),
+      co2_valor_unitario: parseMoney(novadisConfigForm.co2ValorUnitario),
+      co2_valor_tara: parseMoney(novadisConfigForm.co2ValorTara)
+    };
 
-    if (valorBarril < 0 || valorTara < 0) {
+    if (Object.values(nextValues).some((value) => value < 0)) {
       setError("Os valores da Novadis não podem ser negativos.");
       return;
     }
@@ -2406,8 +2540,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       const now = new Date().toISOString();
       const nextConfig: NovadisConfig = {
         ...normalizeNovadisConfig(store.novadisConfig),
-        valor_barril: valorBarril,
-        valor_tara: valorTara,
+        ...nextValues,
         atualizado_por_id: null,
         atualizado_por_nome: currentUserName,
         updated_at: now
@@ -2428,8 +2561,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     const { data, error: saveError } = await supabase.rpc("app_guardar_novadis_config", {
       p_token: sessionToken,
-      p_valor_barril: valorBarril,
-      p_valor_tara: valorTara
+      p_imperial_valor_unitario: nextValues.imperial_valor_unitario,
+      p_imperial_valor_tara: nextValues.imperial_valor_tara,
+      p_cidra_valor_unitario: nextValues.cidra_valor_unitario,
+      p_cidra_valor_tara: nextValues.cidra_valor_tara,
+      p_sangria_valor_unitario: nextValues.sangria_valor_unitario,
+      p_sangria_valor_tara: nextValues.sangria_valor_tara,
+      p_co2_valor_unitario: nextValues.co2_valor_unitario,
+      p_co2_valor_tara: nextValues.co2_valor_tara
     });
 
     setNovadisConfigSaving(false);
@@ -2462,6 +2601,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       const store = readDemoStore();
       const nextBarril: NovadisBarril = {
         id: makeId("novadis-barril"),
+        tipo: novadisBarrilForm.tipo,
         quantidade,
         criado_por_id: null,
         criado_por_nome: currentUserName,
@@ -2484,6 +2624,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     const { error: saveError } = await supabase.rpc("app_registar_novadis_barris", {
       p_token: sessionToken,
+      p_tipo: novadisBarrilForm.tipo,
       p_quantidade: quantidade
     });
 
@@ -3284,41 +3425,36 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         <>
           <section className="summary-grid" aria-label="Totais Novadis">
             <article className="metric metric-total">
-              <span>Valor barris</span>
+              <span>Valor total</span>
               <strong>{formatCurrency(novadisValorBarris)}</strong>
-              <small>
-                {novadisTotalBarris} barris · {formatCurrency(Number(novadisConfig.valor_barril))} cada
-              </small>
+              <small>{novadisTotalBarris} unidades registadas</small>
             </article>
             <article className="metric metric-total">
               <span>Valor tara</span>
               <strong>{formatCurrency(novadisValorTara)}</strong>
-              <small>{formatCurrency(Number(novadisConfig.valor_tara))} por barril</small>
+              <small>Tara total dos registos</small>
             </article>
             <article className="metric metric-total">
               <span>Diferença</span>
               <strong>{formatCurrency(novadisDiferenca)}</strong>
-              <small>Barris menos tara</small>
+              <small>Valor total menos tara</small>
             </article>
-            <article className="metric">
-              <span>Barris recebidos</span>
-              <strong>{novadisTotalBarris}</strong>
-            </article>
-            <article className="metric">
-              <span>Valor unitário</span>
-              <strong>{formatCurrency(Number(novadisConfig.valor_barril))}</strong>
-            </article>
-            <article className="metric">
-              <span>Tara unitária</span>
-              <strong>{formatCurrency(Number(novadisConfig.valor_tara))}</strong>
-            </article>
+            {novadisPorTipo.map((item) => (
+              <article className="metric" key={item.tipo}>
+                <span>{item.label}</span>
+                <strong>{item.quantidade}</strong>
+                <small>
+                  {getNovadisUnitLabel(item.tipo, item.quantidade)} · {formatCurrency(item.valorTotal)}
+                </small>
+              </article>
+            ))}
           </section>
 
           <section className="panel">
             <div className="panel-heading table-heading">
               <div>
                 <p className="eyebrow">Novadis</p>
-                <h2>Valores por barril</h2>
+                <h2>Valores por tipo</h2>
                 <span className="panel-subtitle">
                   Última alteração por {novadisConfig.atualizado_por_nome ?? "Sistema"} em{" "}
                   {formatDateTimeLabel(novadisConfig.updated_at)}
@@ -3346,38 +3482,55 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             ) : null}
 
             <form className="novadis-config-form" onSubmit={handleSaveNovadisConfig}>
-              <label>
-                Valor por barril
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={novadisConfigForm.valorBarril}
-                  onChange={(event) =>
-                    setNovadisConfigForm((current) => ({ ...current, valorBarril: event.target.value }))
-                  }
-                  disabled={!canManageUsers || novadisConfigSaving}
-                />
-              </label>
-              <label>
-                Valor da tara
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={novadisConfigForm.valorTara}
-                  onChange={(event) =>
-                    setNovadisConfigForm((current) => ({ ...current, valorTara: event.target.value }))
-                  }
-                  disabled={!canManageUsers || novadisConfigSaving}
-                />
-              </label>
-              <button className="secondary-button" type="submit" disabled={!canManageUsers || novadisConfigSaving}>
-                <Save size={18} aria-hidden="true" />
-                {novadisConfigSaving ? "A guardar" : "Guardar valores"}
-              </button>
+              <div className="novadis-price-grid">
+                {NOVADIS_TIPOS.map((item) => (
+                  <div className="novadis-price-card" key={item.tipo}>
+                    <h3>{item.label}</h3>
+                    <div className="novadis-price-fields">
+                      <label>
+                        Valor unitário
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={novadisConfigForm[item.valorFormKey]}
+                          onChange={(event) =>
+                            setNovadisConfigForm((current) => ({
+                              ...current,
+                              [item.valorFormKey]: event.target.value
+                            }))
+                          }
+                          disabled={!canManageUsers || novadisConfigSaving}
+                        />
+                      </label>
+                      <label>
+                        Tara
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={novadisConfigForm[item.taraFormKey]}
+                          onChange={(event) =>
+                            setNovadisConfigForm((current) => ({
+                              ...current,
+                              [item.taraFormKey]: event.target.value
+                            }))
+                          }
+                          disabled={!canManageUsers || novadisConfigSaving}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="form-actions wide-field">
+                <button className="secondary-button" type="submit" disabled={!canManageUsers || novadisConfigSaving}>
+                  <Save size={18} aria-hidden="true" />
+                  {novadisConfigSaving ? "A guardar" : "Guardar valores"}
+                </button>
+              </div>
             </form>
           </section>
 
@@ -3388,28 +3541,48 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </div>
               <div>
                 <p className="eyebrow">Receção</p>
-                <h2>Barris de imperial recebidos</h2>
+                <h2>Registos recebidos</h2>
                 <span className="panel-subtitle">O registo guarda automaticamente dia, hora e utilizador.</span>
               </div>
             </div>
 
             <form className="novadis-barril-form" onSubmit={handleRegisterNovadisBarril}>
               <label>
-                Quantidade de barris
+                Tipo
+                <select
+                  value={novadisBarrilForm.tipo}
+                  onChange={(event) =>
+                    setNovadisBarrilForm((current) => ({
+                      ...current,
+                      tipo: normalizeNovadisTipo(event.target.value)
+                    }))
+                  }
+                >
+                  {NOVADIS_TIPOS.map((item) => (
+                    <option key={item.tipo} value={item.tipo}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Quantidade
                 <input
                   type="number"
                   min="1"
                   step="1"
                   inputMode="numeric"
                   value={novadisBarrilForm.quantidade}
-                  onChange={(event) => setNovadisBarrilForm({ quantidade: event.target.value })}
+                  onChange={(event) =>
+                    setNovadisBarrilForm((current) => ({ ...current, quantidade: event.target.value }))
+                  }
                   placeholder="0"
                   required
                 />
               </label>
               <button className="primary-button" type="submit" disabled={novadisBarrilSaving}>
                 <Plus size={18} aria-hidden="true" />
-                {novadisBarrilSaving ? "A registar" : "Registar barris"}
+                {novadisBarrilSaving ? "A registar" : "Registar"}
               </button>
             </form>
           </section>
@@ -3418,7 +3591,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <div className="panel-heading table-heading">
               <div>
                 <p className="eyebrow">Histórico</p>
-                <h2>Barris recebidos</h2>
+                <h2>Registos recebidos</h2>
               </div>
             </div>
 
@@ -3428,8 +3601,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   <thead>
                     <tr>
                       <th>Dia e hora</th>
-                      <th>Barris</th>
-                      <th>Valor barris</th>
+                      <th>Tipo</th>
+                      <th>Quantidade</th>
+                      <th>Valor total</th>
                       <th>Valor tara</th>
                       <th>Diferença</th>
                       <th>Registado por</th>
@@ -3437,15 +3611,19 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   </thead>
                   <tbody>
                     {novadisBarris.map((barril) => {
+                      const tipo = normalizeNovadisTipo(barril.tipo);
+                      const item = NOVADIS_TIPOS.find((current) => current.tipo === tipo) ?? NOVADIS_TIPOS[0];
                       const quantidade = Number(barril.quantidade);
-                      const valorBarris = quantidade * Number(novadisConfig.valor_barril);
-                      const valorTara = quantidade * Number(novadisConfig.valor_tara);
+                      const valorBarris = quantidade * Number(novadisConfig[item.valorKey]);
+                      const valorTara = quantidade * Number(novadisConfig[item.taraKey]);
 
                       return (
                         <tr key={barril.id}>
                           <td>{formatDateTimeLabel(barril.created_at)}</td>
+                          <td>{getNovadisTipoLabel(tipo)}</td>
                           <td>
                             <strong>{quantidade}</strong>
+                            <span>{getNovadisUnitLabel(tipo, quantidade)}</span>
                           </td>
                           <td>{formatCurrency(valorBarris)}</td>
                           <td>{formatCurrency(valorTara)}</td>
@@ -3460,7 +3638,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 </table>
               </div>
             ) : (
-              <div className="empty-state compact">Ainda não existem barris registados.</div>
+              <div className="empty-state compact">Ainda não existem registos Novadis.</div>
             )}
           </section>
         </>
