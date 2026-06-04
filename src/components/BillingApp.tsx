@@ -610,6 +610,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesa[]>(baseTiposDespesa);
   const [utilizadores, setUtilizadores] = useState<Utilizador[]>([]);
   const [editingRegisto, setEditingRegisto] = useState<Registo | null>(null);
+  const [editingDespesa, setEditingDespesa] = useState<Despesa | null>(null);
   const [agenteConfig, setAgenteConfig] = useState<AgenteConfig>(baseAgenteConfig);
   const [pagamentosAgente, setPagamentosAgente] = useState<PagamentoAgente[]>([]);
   const [agenteConfigForm, setAgenteConfigForm] = useState<AgenteConfigForm>(() =>
@@ -893,6 +894,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const dailySaldo = dailyTotals.total - dailyDespesasTotal;
   const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
   const isEditingRegisto = Boolean(editingRegisto);
+  const isEditingDespesa = Boolean(editingDespesa);
   const agenteValoresBase =
     Number(agenteConfig.valor_eventos_anual) +
     Number(agenteConfig.valor_patrocinios) +
@@ -912,6 +914,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const sessionToken = appSession?.token ?? "";
   const isLoggedIn = isDemoMode || Boolean(appSession);
   const canManageUsers = isDemoMode || appSession?.role === "admin";
+  const canDeleteData = isDemoMode || appSession?.role === "admin";
 
   const loadUsers = useCallback(async () => {
     if (isDemoMode) {
@@ -1292,6 +1295,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setPostos([]);
     setTiposDespesa(baseTiposDespesa);
     setUtilizadores([]);
+    setEditingRegisto(null);
+    setEditingDespesa(null);
     setAgenteConfig(baseAgenteConfig);
     setAgenteConfigForm(agenteConfigToForm(baseAgenteConfig));
     setPagamentosAgente([]);
@@ -1300,22 +1305,33 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
   function handleSelectDia(value: string) {
     setEditingRegisto(null);
+    setEditingDespesa(null);
     setSelectedDate(value);
     setForm((current) =>
       isEditingRegisto ? { ...emptyForm(value), postoId: current.postoId } : { ...current, data: value }
     );
-    setDespesaForm((current) => ({ ...current, data: value }));
+    setDespesaForm((current) =>
+      isEditingDespesa ? { ...emptyDespesaForm(value), postoId: current.postoId } : { ...current, data: value }
+    );
   }
 
   function handleSelectPosto(postoId: string) {
     setEditingRegisto(null);
+    setEditingDespesa(null);
     setForm((current) => (isEditingRegisto ? { ...emptyForm(current.data), postoId } : { ...current, postoId }));
-    setDespesaForm((current) => ({ ...current, postoId }));
+    setDespesaForm((current) =>
+      isEditingDespesa ? { ...emptyDespesaForm(current.data), postoId } : { ...current, postoId }
+    );
   }
 
   function handleCancelEditRegisto() {
     setEditingRegisto(null);
     setForm((current) => ({ ...emptyForm(current.data), postoId: current.postoId }));
+  }
+
+  function handleCancelEditDespesa() {
+    setEditingDespesa(null);
+    setDespesaForm((current) => ({ ...emptyDespesaForm(current.data), postoId: current.postoId }));
   }
 
   async function handleSaveDia(event: FormEvent<HTMLFormElement>) {
@@ -1821,6 +1837,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    if (!canDeleteData) {
+      setError("Não tem privilégios para apagar dados inseridos.");
+      return;
+    }
+
     const shouldDelete = window.confirm("Apagar este registo?");
 
     if (!shouldDelete) {
@@ -1952,6 +1973,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    const descricaoAlteracao = despesaForm.observacoes.trim();
+
+    if (isEditingDespesa && !descricaoAlteracao) {
+      setExpenseSaving(false);
+      setError("Descreve o que foi alterado antes de guardar as alterações da despesa.");
+      return;
+    }
+
     const payload = {
       id: despesaForm.id,
       posto_id: despesaForm.postoId,
@@ -1964,7 +1993,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       fatura_paga: despesaForm.faturaPaga,
       numero_fatura: despesaForm.numeroFatura.trim() || null,
       fatura_imagem: despesaForm.faturaImagem || null,
-      observacoes: despesaForm.observacoes.trim() || null
+      observacoes: descricaoAlteracao ? `${isEditingDespesa ? "Alteração: " : ""}${descricaoAlteracao}` : null
     };
 
     if (isDemoMode) {
@@ -1993,7 +2022,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           : [...store.despesas, nextDespesa];
 
       writeDemoStore({ ...store, despesas: nextDespesas });
-      setNotice("Despesa guardada.");
+      setNotice(isEditingDespesa ? "Alterações da despesa guardadas." : "Despesa guardada.");
+      setEditingDespesa(null);
       setDespesaForm((current) => ({ ...emptyDespesaForm(current.data), postoId: current.postoId }));
       setExpenseSaving(false);
       await loadData();
@@ -2028,7 +2058,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    setNotice("Despesa guardada.");
+    setNotice(isEditingDespesa ? "Alterações da despesa guardadas." : "Despesa guardada.");
+    setEditingDespesa(null);
     setDespesaForm((current) => ({ ...emptyDespesaForm(current.data), postoId: current.postoId }));
     await loadData();
   }
@@ -2036,6 +2067,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   async function handleDeleteDespesa(id: string) {
     if (isSelectedDayClosed) {
       setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
+
+    if (!canDeleteData) {
+      setError("Não tem privilégios para apagar dados inseridos.");
       return;
     }
 
@@ -2054,6 +2090,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         ...store,
         despesas: store.despesas.filter((despesa) => despesa.id !== id)
       });
+      if (editingDespesa?.id === id) {
+        handleCancelEditDespesa();
+      }
       setNotice("Despesa apagada.");
       await loadData();
       return;
@@ -2073,6 +2112,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    if (editingDespesa?.id === id) {
+      handleCancelEditDespesa();
+    }
     setNotice("Despesa apagada.");
     await loadData();
   }
@@ -2084,6 +2126,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     }
 
     setEntryTab("despesas");
+    setEditingDespesa(despesa);
     setDespesaForm({
       id: despesa.id,
       postoId: despesa.posto_id,
@@ -2096,9 +2139,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       faturaPaga: despesa.fatura_paga,
       numeroFatura: despesa.numero_fatura ?? "",
       faturaImagem: despesa.fatura_imagem ?? "",
-      observacoes: despesa.observacoes ?? ""
+      observacoes: ""
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("entry-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function handleSaveAgenteConfig(event: FormEvent<HTMLFormElement>) {
@@ -3030,7 +3076,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 <button
                   className={`tab-button ${entryTab === "faturacao" ? "active" : ""}`}
                   type="button"
-                  onClick={() => setEntryTab("faturacao")}
+                  onClick={() => {
+                    setEntryTab("faturacao");
+                    if (isEditingDespesa) {
+                      handleCancelEditDespesa();
+                    }
+                  }}
                 >
                   <Euro size={18} aria-hidden="true" />
                   Faturação
@@ -3040,7 +3091,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   type="button"
                   onClick={() => {
                     setEntryTab("despesas");
-                    setEditingRegisto(null);
+                    if (isEditingRegisto) {
+                      handleCancelEditRegisto();
+                    }
                   }}
                 >
                   <Receipt size={18} aria-hidden="true" />
@@ -3172,6 +3225,23 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 <input value={selectedDayLabel} readOnly disabled />
               </label>
 
+              {isEditingDespesa ? (
+                <div className="edit-menu wide-field">
+                  <div>
+                    <strong>Menu de edição</strong>
+                    <span>
+                      {editingDespesa?.postos?.nome ?? selectedPosto?.nome ?? "Posto"} ·{" "}
+                      {editingDespesa?.numero_despesa ?? nextDespesaNumber}
+                    </span>
+                    {editingDespesa?.observacoes ? <small>Anterior: {editingDespesa.observacoes}</small> : null}
+                  </div>
+                  <button className="icon-text-button" type="button" onClick={handleCancelEditDespesa}>
+                    <X size={18} aria-hidden="true" />
+                    Cancelar
+                  </button>
+                </div>
+              ) : null}
+
               <label>
                 Tipo de despesa
                 <select
@@ -3290,12 +3360,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               ) : null}
 
               <label className="wide-field">
-                Observações
+                {isEditingDespesa ? "Descrição da alteração" : "Observações"}
                 <textarea
                   value={despesaForm.observacoes}
                   onChange={(event) =>
                     setDespesaForm((current) => ({ ...current, observacoes: event.target.value }))
                   }
+                  placeholder={isEditingDespesa ? "Ex.: Corrigido o valor da despesa ou o número da fatura" : ""}
+                  required={isEditingDespesa}
                   rows={3}
                 />
               </label>
@@ -3316,18 +3388,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     ? "Dia fechado"
                     : expenseSaving
                       ? "A guardar"
-                      : despesaForm.id
-                        ? "Guardar despesa"
+                      : isEditingDespesa
+                        ? "Guardar alterações"
                         : "Criar despesa"}
                 </button>
-                {despesaForm.id ? (
-                  <button
-                    className="icon-text-button"
-                    type="button"
-                    onClick={() =>
-                      setDespesaForm((current) => ({ ...emptyDespesaForm(current.data), postoId: current.postoId }))
-                    }
-                  >
+                {isEditingDespesa ? (
+                  <button className="icon-text-button" type="button" onClick={handleCancelEditDespesa}>
                     <X size={18} aria-hidden="true" />
                     Cancelar
                   </button>

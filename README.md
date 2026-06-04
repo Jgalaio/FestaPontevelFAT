@@ -24,7 +24,7 @@ Sem variáveis Supabase, a app abre em modo de demonstração e guarda dados no 
 
 1. Criar um projeto no Supabase.
 2. Abrir `SQL Editor`.
-3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql` e `supabase/add-pag-agente.sql`.
+3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql`, `supabase/add-pag-agente.sql` e `supabase/admin-delete-guard.sql`.
 4. Copiar `Project URL` e a `publishable key`.
 
 Depois preencher:
@@ -49,6 +49,7 @@ supabase/add-pagamento-despesas.sql
 supabase/auto-numero-despesas.sql
 supabase/add-imagem-fatura-despesas.sql
 supabase/add-pag-agente.sql
+supabase/admin-delete-guard.sql
 ```
 
 Essa atualização cria:
@@ -60,6 +61,7 @@ Essa atualização cria:
 - número de despesa automático por posto/dia e número de fatura editável mesmo por pagar
 - imagem opcional da fatura em `despesas_posto`
 - `agente_config` e `pagamentos_agente`, com valor necessário, valores-base e entregas ao agente
+- proteção para apagar faturação/despesas apenas com papel `admin`
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
 - funções RPC para login, faturação, despesas, pagamentos, dias, postos e gestão de utilizadores
