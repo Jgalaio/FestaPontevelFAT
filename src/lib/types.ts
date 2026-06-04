@@ -647,6 +647,10 @@ export type Database = {
         Args: { p_token: string; p_data: string; p_tipo: NovadisTipo; p_quantidade: number };
         Returns: NovadisConsumo[];
       };
+      app_definir_novadis_consumo_total: {
+        Args: { p_token: string; p_data: string; p_tipo: NovadisTipo; p_quantidade: number };
+        Returns: NovadisConsumo[];
+      };
       app_login: {
         Args: { p_username: string; p_password: string };
         Returns: AppSession[];

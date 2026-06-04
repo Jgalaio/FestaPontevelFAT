@@ -110,7 +110,7 @@ git push -u origin main
 
 Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor desse dia. Quando um dia é fechado, a base de dados bloqueia novas alterações de faturação e despesas para essa data.
 
-Os valores da Novadis são apresentados numa aba própria e não entram nos totais da festa. Na consignação, as unidades cheias a devolver contam pelo valor unitário e as unidades gastas/vazias contam pelo valor da tara.
+Os valores da Novadis são apresentados numa aba própria e não entram nos totais da festa. Na consignação, as unidades cheias a devolver contam pelo valor unitário e as unidades gastas/vazias contam pelo valor da tara. O resumo de consignação permite editar o total gasto por produto para corrigir enganos de lançamento.
 
 ## Próximos passos recomendados
 

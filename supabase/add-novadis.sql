@@ -406,3 +406,102 @@ begin
   where id = saved_id;
 end;
 $$;
+
+create or replace function public.app_definir_novadis_consumo_total(
+  p_token text,
+  p_data date,
+  p_tipo text,
+  p_quantidade integer
+)
+returns setof public.novadis_consumos
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  actor record;
+  consumo record;
+  normalized_tipo text;
+  remaining_to_remove integer;
+  target_total integer;
+  total_recebido integer;
+  total_consumido integer;
+begin
+  select * into actor from public.app_require_actor(p_token) limit 1;
+
+  perform public.app_require_dia_aberto(p_data);
+
+  normalized_tipo := coalesce(nullif(trim(p_tipo), ''), 'imperial');
+
+  if normalized_tipo not in ('imperial', 'cidra', 'sangria', 'co2') then
+    raise exception 'Escolhe um tipo de registo Novadis válido' using errcode = '22023';
+  end if;
+
+  if coalesce(p_quantidade, 0) < 0 then
+    raise exception 'Indica um total gasto válido' using errcode = '22023';
+  end if;
+
+  target_total := coalesce(p_quantidade, 0);
+
+  select coalesce(sum(quantidade), 0)
+  into total_recebido
+  from public.novadis_barris
+  where tipo = normalized_tipo;
+
+  if target_total > total_recebido then
+    raise exception 'O total gasto não pode ultrapassar o total recebido desse produto' using errcode = '22023';
+  end if;
+
+  select coalesce(sum(quantidade), 0)
+  into total_consumido
+  from public.novadis_consumos
+  where tipo = normalized_tipo;
+
+  if target_total > total_consumido then
+    insert into public.novadis_consumos (
+      data,
+      tipo,
+      quantidade,
+      criado_por_id,
+      criado_por_nome
+    )
+    values (
+      p_data,
+      normalized_tipo,
+      target_total - total_consumido,
+      actor.utilizador_id,
+      actor.nome
+    );
+  elsif target_total < total_consumido then
+    remaining_to_remove := total_consumido - target_total;
+
+    for consumo in
+      select id, quantidade
+      from public.novadis_consumos
+      where tipo = normalized_tipo
+      order by created_at desc
+    loop
+      exit when remaining_to_remove <= 0;
+
+      if consumo.quantidade <= remaining_to_remove then
+        delete from public.novadis_consumos
+        where id = consumo.id;
+
+        remaining_to_remove := remaining_to_remove - consumo.quantidade;
+      else
+        update public.novadis_consumos
+        set quantidade = quantidade - remaining_to_remove
+        where id = consumo.id;
+
+        remaining_to_remove := 0;
+      end if;
+    end loop;
+  end if;
+
+  return query
+  select *
+  from public.novadis_consumos
+  where tipo = normalized_tipo
+  order by data desc, created_at desc;
+end;
+$$;

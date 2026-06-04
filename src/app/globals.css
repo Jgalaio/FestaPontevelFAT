@@ -717,6 +717,12 @@ input:disabled {
   background: rgba(195, 213, 255, 0.96);
 }
 
+.table-action {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.84rem;
+}
+
 .side-panel {
   align-self: start;
 }
