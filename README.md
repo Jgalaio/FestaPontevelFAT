@@ -1,7 +1,7 @@
 # Faturação Pontevel
 
 Sistema web para registo diário da faturação da Festa de Pontével por posto.
-Inclui overview global, registo por posto, gestão e relatório diário pronto para impressão.
+Inclui overview global, registo por posto, gestão, Pag.Agente e relatório diário pronto para impressão.
 
 ## Stack
 
@@ -24,7 +24,7 @@ Sem variáveis Supabase, a app abre em modo de demonstração e guarda dados no 
 
 1. Criar um projeto no Supabase.
 2. Abrir `SQL Editor`.
-3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql` e `supabase/add-imagem-fatura-despesas.sql`.
+3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql` e `supabase/add-pag-agente.sql`.
 4. Copiar `Project URL` e a `publishable key`.
 
 Depois preencher:
@@ -48,6 +48,7 @@ supabase/add-dias-festa.sql
 supabase/add-pagamento-despesas.sql
 supabase/auto-numero-despesas.sql
 supabase/add-imagem-fatura-despesas.sql
+supabase/add-pag-agente.sql
 ```
 
 Essa atualização cria:
@@ -58,6 +59,7 @@ Essa atualização cria:
 - campos `fat_com_nif` e `tipo_pagamento` em `despesas_posto`
 - número de despesa automático por posto/dia e número de fatura editável mesmo por pagar
 - imagem opcional da fatura em `despesas_posto`
+- `agente_config` e `pagamentos_agente`, com valores-base e entregas ao agente
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
 - funções RPC para login, faturação, despesas, pagamentos, dias, postos e gestão de utilizadores
@@ -94,6 +96,8 @@ git push -u origin main
 - `dias_festa`: dias selecionáveis da festa, com estado aberto/fechado
 - `registos_faturacao`: posto, data, dinheiro, multibanco, MB Way, observações, criado por, atualizado por
 - `despesas_posto`: posto, data, tipo, número automático, valor, FAT com NIF, tipo de pagamento, estado/número/imagem da fatura
+- `agente_config`: valores Eventos Anual, Patrocínios e Peditório para o Pag.Agente
+- `pagamentos_agente`: entregas ao agente com valor, data/hora e utilizador
 - `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia
 

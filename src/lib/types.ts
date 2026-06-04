@@ -89,6 +89,25 @@ export type Despesa = DespesaRow & {
   postos?: Pick<Posto, "id" | "nome" | "responsavel"> | null;
 };
 
+export type AgenteConfig = {
+  id: boolean;
+  valor_eventos_anual: number;
+  valor_patrocinios: number;
+  valor_peditorio: number;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PagamentoAgente = {
+  id: string;
+  valor: number;
+  entregue_por_id: string | null;
+  entregue_por_nome: string;
+  created_at: string;
+};
+
 export type AuditoriaRegisto = {
   id: string;
   registo_id: string | null;
@@ -307,6 +326,33 @@ export type Database = {
           }
         ];
       };
+      agente_config: {
+        Row: AgenteConfig;
+        Insert: {
+          id?: boolean;
+          valor_eventos_anual?: number;
+          valor_patrocinios?: number;
+          valor_peditorio?: number;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<AgenteConfig>;
+        Relationships: [];
+      };
+      pagamentos_agente: {
+        Row: PagamentoAgente;
+        Insert: {
+          id?: string;
+          valor: number;
+          entregue_por_id?: string | null;
+          entregue_por_nome: string;
+          created_at?: string;
+        };
+        Update: Partial<PagamentoAgente>;
+        Relationships: [];
+      };
       registos_faturacao_auditoria: {
         Row: AuditoriaRegisto;
         Insert: {
@@ -439,6 +485,10 @@ export type Database = {
         Args: { p_token: string; p_data: string };
         Returns: DespesaRpc[];
       };
+      app_listar_pagamentos_agente: {
+        Args: { p_token: string };
+        Returns: PagamentoAgente[];
+      };
       app_fechar_dia: {
         Args: { p_token: string; p_id: string };
         Returns: DiaFesta[];
@@ -458,6 +508,23 @@ export type Database = {
       app_listar_utilizadores: {
         Args: { p_token: string };
         Returns: Utilizador[];
+      };
+      app_obter_agente_config: {
+        Args: { p_token: string };
+        Returns: AgenteConfig[];
+      };
+      app_guardar_agente_config: {
+        Args: {
+          p_token: string;
+          p_valor_eventos_anual?: number;
+          p_valor_patrocinios?: number;
+          p_valor_peditorio?: number;
+        };
+        Returns: AgenteConfig[];
+      };
+      app_registar_pagamento_agente: {
+        Args: { p_token: string; p_valor: number };
+        Returns: PagamentoAgente[];
       };
       app_login: {
         Args: { p_username: string; p_password: string };

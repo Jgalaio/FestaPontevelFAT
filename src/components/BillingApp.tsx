@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Euro,
   FileText,
+  HandCoins,
   Home,
   KeyRound,
   LogOut,
@@ -27,6 +28,7 @@ import {
 import { createBrowserSupabaseClient, hasSupabaseConfig } from "@/lib/supabase";
 import { formatCurrency, formatDateLabel, formatDateTimeLabel, parseMoney, todayISO } from "@/lib/format";
 import type {
+  AgenteConfig,
   AppSession,
   Despesa,
   DespesaForm,
@@ -38,6 +40,7 @@ import type {
   RegistoForm,
   RegistoRow,
   RegistoRpc,
+  PagamentoAgente,
   TipoDespesa,
   Utilizador
 } from "@/lib/types";
@@ -48,11 +51,13 @@ type DemoStore = {
   registos: RegistoRow[];
   despesas: DespesaRow[];
   tiposDespesa: TipoDespesa[];
+  agenteConfig: AgenteConfig;
+  pagamentosAgente: PagamentoAgente[];
 };
 
 type EntryTab = "faturacao" | "despesas";
-type SideTab = "dias" | "postos" | "tipos" | "utilizadores";
-type BillingAppMode = "overview" | "register" | "management" | "reports";
+type SideTab = "agente" | "dias" | "postos" | "tipos" | "utilizadores";
+type BillingAppMode = "agent" | "overview" | "register" | "management" | "reports";
 type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
 type BillingAppProps = {
@@ -84,6 +89,16 @@ type UserForm = {
   password: string;
   ativo: boolean;
   role: "admin" | "operador";
+};
+
+type AgenteConfigForm = {
+  valorEventosAnual: string;
+  valorPatrocinios: string;
+  valorPeditorio: string;
+};
+
+type PagamentoAgenteForm = {
+  valor: string;
 };
 
 const STORAGE_KEY = "pontevel-faturacao-mvp";
@@ -157,6 +172,17 @@ const baseDiasFesta: DiaFesta[] = [
     updated_at: "2026-06-03T00:00:00.000Z"
   }
 ];
+
+const baseAgenteConfig: AgenteConfig = {
+  id: true,
+  valor_eventos_anual: 0,
+  valor_patrocinios: 0,
+  valor_peditorio: 0,
+  atualizado_por_id: null,
+  atualizado_por_nome: "Sistema",
+  created_at: "2026-06-03T00:00:00.000Z",
+  updated_at: "2026-06-03T00:00:00.000Z"
+};
 
 function makeId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -251,6 +277,20 @@ function emptyUserForm(): UserForm {
     password: "",
     ativo: true,
     role: "operador"
+  };
+}
+
+function agenteConfigToForm(config: AgenteConfig): AgenteConfigForm {
+  return {
+    valorEventosAnual: String(Number(config.valor_eventos_anual).toFixed(2)),
+    valorPatrocinios: String(Number(config.valor_patrocinios).toFixed(2)),
+    valorPeditorio: String(Number(config.valor_peditorio).toFixed(2))
+  };
+}
+
+function emptyPagamentoAgenteForm(): PagamentoAgenteForm {
+  return {
+    valor: ""
   };
 }
 
@@ -374,13 +414,29 @@ function getNextDespesaNumber(despesas: Pick<DespesaRow, "data" | "numero_despes
 
 function readDemoStore(): DemoStore {
   if (typeof window === "undefined") {
-    return { diasFesta: baseDiasFesta, postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
+    return {
+      agenteConfig: baseAgenteConfig,
+      diasFesta: baseDiasFesta,
+      postos: basePostos,
+      registos: [],
+      despesas: [],
+      pagamentosAgente: [],
+      tiposDespesa: baseTiposDespesa
+    };
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY);
 
   if (!raw) {
-    return { diasFesta: baseDiasFesta, postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
+    return {
+      agenteConfig: baseAgenteConfig,
+      diasFesta: baseDiasFesta,
+      postos: basePostos,
+      registos: [],
+      despesas: [],
+      pagamentosAgente: [],
+      tiposDespesa: baseTiposDespesa
+    };
   }
 
   try {
@@ -391,13 +447,23 @@ function readDemoStore(): DemoStore {
 
     return {
       diasFesta,
+      agenteConfig: parsed.agenteConfig ?? baseAgenteConfig,
       postos: parsed.postos?.length ? parsed.postos : basePostos,
       registos,
       despesas,
+      pagamentosAgente: parsed.pagamentosAgente ?? [],
       tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
-    return { diasFesta: baseDiasFesta, postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
+    return {
+      agenteConfig: baseAgenteConfig,
+      diasFesta: baseDiasFesta,
+      postos: basePostos,
+      registos: [],
+      despesas: [],
+      pagamentosAgente: [],
+      tiposDespesa: baseTiposDespesa
+    };
   }
 }
 
@@ -513,6 +579,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const isRegisterMode = mode === "register";
   const isManagementMode = mode === "management";
   const isReportsMode = mode === "reports";
+  const isAgentMode = mode === "agent";
   const startDate = useMemo(() => todayISO(), []);
 
   const [appSession, setAppSession] = useState<AppSession | null>(null);
@@ -528,6 +595,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesa[]>(baseTiposDespesa);
   const [utilizadores, setUtilizadores] = useState<Utilizador[]>([]);
+  const [agenteConfig, setAgenteConfig] = useState<AgenteConfig>(baseAgenteConfig);
+  const [pagamentosAgente, setPagamentosAgente] = useState<PagamentoAgente[]>([]);
+  const [agenteConfigForm, setAgenteConfigForm] = useState<AgenteConfigForm>(() =>
+    agenteConfigToForm(baseAgenteConfig)
+  );
+  const [pagamentoAgenteForm, setPagamentoAgenteForm] = useState<PagamentoAgenteForm>(() =>
+    emptyPagamentoAgenteForm()
+  );
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
   const [tipoDespesaForm, setTipoDespesaForm] = useState<TipoDespesaForm>(() => emptyTipoDespesaForm());
@@ -541,6 +616,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [postoSaving, setPostoSaving] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
   const [tipoDespesaSaving, setTipoDespesaSaving] = useState(false);
+  const [agenteConfigSaving, setAgenteConfigSaving] = useState(false);
+  const [pagamentoAgenteSaving, setPagamentoAgenteSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -798,6 +875,13 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
   const dailySaldo = dailyTotals.total - dailyDespesasTotal;
   const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
+  const agenteValoresBase =
+    Number(agenteConfig.valor_eventos_anual) +
+    Number(agenteConfig.valor_patrocinios) +
+    Number(agenteConfig.valor_peditorio);
+  const agenteTotalDisponivel = agenteValoresBase + dailySaldo;
+  const agenteTotalEntregue = pagamentosAgente.reduce((acc, pagamento) => acc + Number(pagamento.valor), 0);
+  const agenteSaldoPorEntregar = agenteTotalDisponivel - agenteTotalEntregue;
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -846,6 +930,46 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setUtilizadores(data ?? []);
   }, [isDemoMode, sessionToken, supabase]);
 
+  const loadAgentData = useCallback(async () => {
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextConfig = store.agenteConfig ?? baseAgenteConfig;
+
+      setAgenteConfig(nextConfig);
+      setAgenteConfigForm(agenteConfigToForm(nextConfig));
+      setPagamentosAgente(store.pagamentosAgente ?? []);
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setAgenteConfig(baseAgenteConfig);
+      setAgenteConfigForm(agenteConfigToForm(baseAgenteConfig));
+      setPagamentosAgente([]);
+      return;
+    }
+
+    const [configResult, pagamentosResult] = await Promise.all([
+      supabase.rpc("app_obter_agente_config", { p_token: sessionToken }),
+      supabase.rpc("app_listar_pagamentos_agente", { p_token: sessionToken })
+    ]);
+
+    if (configResult.error) {
+      setError(configResult.error.message);
+      return;
+    }
+
+    if (pagamentosResult.error) {
+      setError(pagamentosResult.error.message);
+      return;
+    }
+
+    const nextConfig = configResult.data?.[0] ?? baseAgenteConfig;
+
+    setAgenteConfig(nextConfig);
+    setAgenteConfigForm(agenteConfigToForm(nextConfig));
+    setPagamentosAgente(pagamentosResult.data ?? []);
+  }, [isDemoMode, sessionToken, supabase]);
+
   const loadData = useCallback(async () => {
     setError("");
 
@@ -864,7 +988,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       setPostos(store.postos);
       setTiposDespesa(store.tiposDespesa);
 
-      if (isOverviewMode) {
+      if (isOverviewMode || isAgentMode) {
         setRegistos(attachPostos(store.registos, store.postos));
         setDespesas(attachPostosToDespesas(store.despesas, store.postos));
       } else {
@@ -920,7 +1044,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setTiposDespesa(tiposDespesaResult.data?.length ? tiposDespesaResult.data : baseTiposDespesa);
 
-    if (isOverviewMode) {
+    if (isOverviewMode || isAgentMode) {
       if (!nextDias.length) {
         setRegistos([]);
         setDespesas([]);
@@ -983,7 +1107,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setRegistos((registosResult.data ?? []).map(mapRegistoRpc));
     setDespesas((despesasResult.data ?? []).map(mapDespesaRpc));
-  }, [isDemoMode, isOverviewMode, selectedDate, sessionToken, supabase]);
+  }, [isAgentMode, isDemoMode, isOverviewMode, selectedDate, sessionToken, supabase]);
 
   useEffect(() => {
     if (!supabase) {
@@ -1038,6 +1162,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       void loadData();
     }
   }, [isLoggedIn, loadData]);
+
+  useEffect(() => {
+    if (isLoggedIn && (isAgentMode || isManagementMode)) {
+      void loadAgentData();
+    }
+  }, [isAgentMode, isLoggedIn, isManagementMode, loadAgentData]);
 
   useEffect(() => {
     setForm((current) => ({ ...current, data: selectedDate }));
@@ -1135,6 +1265,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setPostos([]);
     setTiposDespesa(baseTiposDespesa);
     setUtilizadores([]);
+    setAgenteConfig(baseAgenteConfig);
+    setAgenteConfigForm(agenteConfigToForm(baseAgenteConfig));
+    setPagamentosAgente([]);
+    setPagamentoAgenteForm(emptyPagamentoAgenteForm());
   }
 
   function handleSelectDia(value: string) {
@@ -1901,6 +2035,118 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function handleSaveAgenteConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const valorEventosAnual = parseMoney(agenteConfigForm.valorEventosAnual);
+    const valorPatrocinios = parseMoney(agenteConfigForm.valorPatrocinios);
+    const valorPeditorio = parseMoney(agenteConfigForm.valorPeditorio);
+
+    if (valorEventosAnual < 0 || valorPatrocinios < 0 || valorPeditorio < 0) {
+      setError("Os valores do Pag.Agente não podem ser negativos.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const now = new Date().toISOString();
+      const nextConfig: AgenteConfig = {
+        ...store.agenteConfig,
+        valor_eventos_anual: valorEventosAnual,
+        valor_patrocinios: valorPatrocinios,
+        valor_peditorio: valorPeditorio,
+        atualizado_por_id: null,
+        atualizado_por_nome: currentUserName,
+        updated_at: now
+      };
+
+      writeDemoStore({ ...store, agenteConfig: nextConfig });
+      setAgenteConfig(nextConfig);
+      setAgenteConfigForm(agenteConfigToForm(nextConfig));
+      setNotice("Valores do Pag.Agente guardados.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setAgenteConfigSaving(true);
+
+    const { data, error: saveError } = await supabase.rpc("app_guardar_agente_config", {
+      p_token: sessionToken,
+      p_valor_eventos_anual: valorEventosAnual,
+      p_valor_patrocinios: valorPatrocinios,
+      p_valor_peditorio: valorPeditorio
+    });
+
+    setAgenteConfigSaving(false);
+
+    if (saveError || !data?.[0]) {
+      setError(saveError?.message ?? "Não foi possível guardar os valores do Pag.Agente.");
+      return;
+    }
+
+    setAgenteConfig(data[0]);
+    setAgenteConfigForm(agenteConfigToForm(data[0]));
+    setNotice("Valores do Pag.Agente guardados.");
+  }
+
+  async function handleRegisterPagamentoAgente(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const valor = parseMoney(pagamentoAgenteForm.valor);
+
+    if (valor <= 0) {
+      setError("Indica um valor entregue ao agente maior que zero.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextPagamento: PagamentoAgente = {
+        id: makeId("pagamento-agente"),
+        valor,
+        entregue_por_id: null,
+        entregue_por_nome: currentUserName,
+        created_at: new Date().toISOString()
+      };
+      const nextPagamentos = [nextPagamento, ...(store.pagamentosAgente ?? [])];
+
+      writeDemoStore({ ...store, pagamentosAgente: nextPagamentos });
+      setPagamentosAgente(nextPagamentos);
+      setPagamentoAgenteForm(emptyPagamentoAgenteForm());
+      setNotice("Entrega ao agente registada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setPagamentoAgenteSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_registar_pagamento_agente", {
+      p_token: sessionToken,
+      p_valor: valor
+    });
+
+    setPagamentoAgenteSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setPagamentoAgenteForm(emptyPagamentoAgenteForm());
+    setNotice("Entrega ao agente registada.");
+    await loadAgentData();
+  }
+
   async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -2047,7 +2293,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 ? "Registo diário"
                 : isReportsMode
                   ? "Relatórios"
-                  : "Gestão"}
+                  : isAgentMode
+                    ? "Pag.Agente"
+                    : "Gestão"}
           </h1>
         </div>
 
@@ -2091,6 +2339,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         <Link className={`app-nav-link ${isReportsMode ? "active" : ""}`} href="/relatorios">
           <FileText size={18} aria-hidden="true" />
           Relatórios
+        </Link>
+        <Link className={`app-nav-link ${isAgentMode ? "active" : ""}`} href="/pag-agente">
+          <HandCoins size={18} aria-hidden="true" />
+          Pag.Agente
         </Link>
         <Link className={`app-nav-link ${isManagementMode ? "active" : ""}`} href="/gestao">
           <Settings size={18} aria-hidden="true" />
@@ -2521,6 +2773,126 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </section>
       ) : null}
 
+      {isAgentMode ? (
+        <>
+          <section className="summary-grid" aria-label="Totais Pag.Agente">
+            <article className="metric metric-total">
+              <span>Total a entregar</span>
+              <strong>{formatCurrency(agenteTotalDisponivel)}</strong>
+              <small>Valores base + saldo da festa</small>
+            </article>
+            <article className="metric metric-total">
+              <span>Total entregue</span>
+              <strong>{formatCurrency(agenteTotalEntregue)}</strong>
+              <small>{pagamentosAgente.length} entregas registadas</small>
+            </article>
+            <article className="metric metric-total">
+              <span>Por entregar</span>
+              <strong>{formatCurrency(agenteSaldoPorEntregar)}</strong>
+              <small>Saldo atual do agente</small>
+            </article>
+            <article className="metric">
+              <span>Eventos anual</span>
+              <strong>{formatCurrency(Number(agenteConfig.valor_eventos_anual))}</strong>
+            </article>
+            <article className="metric">
+              <span>Patrocínios</span>
+              <strong>{formatCurrency(Number(agenteConfig.valor_patrocinios))}</strong>
+            </article>
+            <article className="metric">
+              <span>Peditório</span>
+              <strong>{formatCurrency(Number(agenteConfig.valor_peditorio))}</strong>
+            </article>
+            <article className="metric">
+              <span>Saldo da festa</span>
+              <strong>{formatCurrency(dailySaldo)}</strong>
+            </article>
+            <article className="metric">
+              <span>Valores base</span>
+              <strong>{formatCurrency(agenteValoresBase)}</strong>
+            </article>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Pag.Agente</p>
+                <h2>Entrega de dinheiro ao agente</h2>
+                <span className="panel-subtitle">O registo guarda automaticamente dia, hora e utilizador.</span>
+              </div>
+              <button
+                className="icon-text-button"
+                type="button"
+                onClick={() => {
+                  void loadData();
+                  void loadAgentData();
+                }}
+                disabled={loading}
+              >
+                <RefreshCw size={18} className={loading ? "spin" : ""} aria-hidden="true" />
+                Atualizar
+              </button>
+            </div>
+
+            <form className="agent-payment-form" onSubmit={handleRegisterPagamentoAgente}>
+              <label>
+                Valor entregue ao agente
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={pagamentoAgenteForm.valor}
+                  onChange={(event) => setPagamentoAgenteForm({ valor: event.target.value })}
+                  placeholder="0,00"
+                  required
+                />
+              </label>
+              <button className="primary-button" type="submit" disabled={pagamentoAgenteSaving}>
+                <HandCoins size={18} aria-hidden="true" />
+                {pagamentoAgenteSaving ? "A registar" : "Registar entrega"}
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Histórico</p>
+                <h2>Entregas ao agente</h2>
+              </div>
+            </div>
+
+            {pagamentosAgente.length ? (
+              <div className="table-wrap">
+                <table className="agent-table">
+                  <thead>
+                    <tr>
+                      <th>Dia e hora</th>
+                      <th>Valor</th>
+                      <th>Entregue por</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagamentosAgente.map((pagamento) => (
+                      <tr key={pagamento.id}>
+                        <td>{formatDateTimeLabel(pagamento.created_at)}</td>
+                        <td>
+                          <strong>{formatCurrency(Number(pagamento.valor))}</strong>
+                        </td>
+                        <td>{pagamento.entregue_por_nome}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem entregas ao agente.</div>
+            )}
+          </section>
+        </>
+      ) : null}
+
       {isRegisterMode ? (
         <section className="posto-folder" aria-label="Postos">
           {activePostos.length ? (
@@ -2550,7 +2922,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </section>
       ) : null}
 
-      {!isOverviewMode && !isReportsMode ? (
+      {!isOverviewMode && !isReportsMode && !isAgentMode ? (
         <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
           {isRegisterMode ? (
             <section className="panel entry-panel">
@@ -2836,6 +3208,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   Dias
                 </button>
                 <button
+                  className={`tab-button ${sideTab === "agente" ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setSideTab("agente")}
+                >
+                  <HandCoins size={18} aria-hidden="true" />
+                  Pag.Agente
+                </button>
+                <button
                   className={`tab-button ${sideTab === "postos" ? "active" : ""}`}
                   type="button"
                   onClick={() => setSideTab("postos")}
@@ -2935,6 +3315,89 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 ) : (
                   <div className="empty-state">Sem dias criados.</div>
                 )}
+              </div>
+            </>
+          ) : sideTab === "agente" ? (
+            <>
+              <div className="panel-heading">
+                <div className="heading-icon">
+                  <HandCoins size={20} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="eyebrow">Pag.Agente</p>
+                  <h2>Valores base</h2>
+                  <span className="panel-subtitle">
+                    Estes valores entram no cálculo do total a entregar ao agente.
+                  </span>
+                </div>
+              </div>
+
+              <form className="agente-form" onSubmit={handleSaveAgenteConfig}>
+                <label>
+                  Valor Eventos Anual
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={agenteConfigForm.valorEventosAnual}
+                    onChange={(event) =>
+                      setAgenteConfigForm((current) => ({ ...current, valorEventosAnual: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Valor Patrocínios
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={agenteConfigForm.valorPatrocinios}
+                    onChange={(event) =>
+                      setAgenteConfigForm((current) => ({ ...current, valorPatrocinios: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Valor Peditório
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={agenteConfigForm.valorPeditorio}
+                    onChange={(event) =>
+                      setAgenteConfigForm((current) => ({ ...current, valorPeditorio: event.target.value }))
+                    }
+                  />
+                </label>
+                <div className="user-form-actions">
+                  <button className="secondary-button" type="submit" disabled={agenteConfigSaving}>
+                    <Save size={18} aria-hidden="true" />
+                    {agenteConfigSaving ? "A guardar" : "Guardar valores"}
+                  </button>
+                </div>
+              </form>
+
+              <div className="summary-grid management-summary">
+                <article className="metric">
+                  <span>Eventos anual</span>
+                  <strong>{formatCurrency(Number(agenteConfig.valor_eventos_anual))}</strong>
+                </article>
+                <article className="metric">
+                  <span>Patrocínios</span>
+                  <strong>{formatCurrency(Number(agenteConfig.valor_patrocinios))}</strong>
+                </article>
+                <article className="metric">
+                  <span>Peditório</span>
+                  <strong>{formatCurrency(Number(agenteConfig.valor_peditorio))}</strong>
+                </article>
+                <article className="metric">
+                  <span>Atualizado por</span>
+                  <strong>{agenteConfig.atualizado_por_nome ?? "Sistema"}</strong>
+                  <small>{formatDateTimeLabel(agenteConfig.updated_at)}</small>
+                </article>
               </div>
             </>
           ) : sideTab === "postos" ? (

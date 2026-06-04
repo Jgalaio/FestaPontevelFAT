@@ -134,7 +134,7 @@ button:disabled {
 
 .app-nav {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   padding: 5px;
   margin-bottom: 16px;
@@ -372,7 +372,9 @@ td span,
 }
 
 .auth-form,
+.agent-payment-form,
 .dia-form,
+.agente-form,
 .posto-form,
 .tipo-form,
 .user-form {
@@ -380,9 +382,23 @@ td span,
   gap: 12px;
 }
 
+.agent-payment-form {
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+}
+
+.agente-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+
 .dia-form {
   grid-template-columns: 180px 1fr auto;
   align-items: end;
+}
+
+.agente-form .user-form-actions {
+  grid-column: 1 / -1;
 }
 
 .posto-form {
@@ -656,6 +672,10 @@ table {
   min-width: 1320px;
 }
 
+.agent-table {
+  min-width: 720px;
+}
+
 .report-table {
   min-width: 1000px;
 }
@@ -859,6 +879,8 @@ td {
   }
 
   .posto-form,
+  .agente-form,
+  .agent-payment-form,
   .dia-form,
   .tipo-form,
   .user-form {
