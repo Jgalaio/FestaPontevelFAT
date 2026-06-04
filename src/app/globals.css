@@ -19,6 +19,12 @@
   box-sizing: border-box;
 }
 
+*,
+*::before,
+*::after {
+  min-width: 0;
+}
+
 html {
   min-height: 100%;
   background: #eef4ff;
@@ -104,8 +110,9 @@ button:disabled {
 .topbar h1,
 .auth-panel h1 {
   margin: 4px 0 0;
-  font-size: clamp(2rem, 5vw, 3.7rem);
-  line-height: 1;
+  font-size: 2.75rem;
+  line-height: 1.04;
+  overflow-wrap: anywhere;
 }
 
 .eyebrow {
@@ -153,7 +160,12 @@ button:disabled {
   gap: 8px;
   border-radius: 6px;
   color: var(--muted);
+  font-size: 0.94rem;
   font-weight: 850;
+  line-height: 1.1;
+  padding: 0 8px;
+  text-align: center;
+  white-space: normal;
 }
 
 .app-nav-link.active {
@@ -206,6 +218,7 @@ button:disabled {
   align-content: space-between;
   gap: 12px;
   padding: 18px;
+  overflow: hidden;
 }
 
 .metric span,
@@ -218,8 +231,16 @@ td span,
 }
 
 .metric strong {
-  font-size: clamp(1.15rem, 1.8vw, 1.75rem);
-  line-height: 1;
+  display: block;
+  max-width: 100%;
+  font-size: 1.42rem;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.metric-total strong {
+  font-size: 1.85rem;
 }
 
 .metric-total {
@@ -522,6 +543,9 @@ input:disabled {
   min-height: 44px;
   gap: 9px;
   padding: 0 16px;
+  line-height: 1.1;
+  text-align: center;
+  white-space: normal;
 }
 
 .primary-button {
@@ -570,11 +594,16 @@ input:disabled {
   justify-content: center;
   min-height: 38px;
   gap: 8px;
+  padding: 0 8px;
   border: 0;
   border-radius: 6px;
   color: var(--muted);
   background: transparent;
+  font-size: 0.9rem;
   font-weight: 850;
+  line-height: 1.1;
+  text-align: center;
+  white-space: normal;
 }
 
 .tab-button.active {
@@ -772,8 +801,9 @@ td {
 
 .report-header h2 {
   margin: 4px 0 4px;
-  font-size: clamp(1.8rem, 4vw, 3rem);
-  line-height: 1;
+  font-size: 2.15rem;
+  line-height: 1.06;
+  overflow-wrap: anywhere;
 }
 
 .report-header span,
@@ -817,8 +847,9 @@ td {
 }
 
 .report-summary-card strong {
-  font-size: 1.35rem;
-  line-height: 1;
+  font-size: 1.18rem;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
 }
 
 .report-summary-card.featured {
