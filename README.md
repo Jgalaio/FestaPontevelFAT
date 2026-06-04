@@ -59,7 +59,7 @@ Essa atualização cria:
 - campos `fat_com_nif` e `tipo_pagamento` em `despesas_posto`
 - número de despesa automático por posto/dia e número de fatura editável mesmo por pagar
 - imagem opcional da fatura em `despesas_posto`
-- `agente_config` e `pagamentos_agente`, com valores-base e entregas ao agente
+- `agente_config` e `pagamentos_agente`, com valor necessário, valores-base e entregas ao agente
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
 - funções RPC para login, faturação, despesas, pagamentos, dias, postos e gestão de utilizadores
@@ -96,7 +96,7 @@ git push -u origin main
 - `dias_festa`: dias selecionáveis da festa, com estado aberto/fechado
 - `registos_faturacao`: posto, data, dinheiro, multibanco, MB Way, observações, criado por, atualizado por
 - `despesas_posto`: posto, data, tipo, número automático, valor, FAT com NIF, tipo de pagamento, estado/número/imagem da fatura
-- `agente_config`: valores Eventos Anual, Patrocínios e Peditório para o Pag.Agente
+- `agente_config`: valor necessário ao agente, Eventos Anual, Patrocínios e Peditório para o Pag.Agente
 - `pagamentos_agente`: entregas ao agente com valor, data/hora e utilizador
 - `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia

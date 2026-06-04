@@ -94,6 +94,7 @@ export type AgenteConfig = {
   valor_eventos_anual: number;
   valor_patrocinios: number;
   valor_peditorio: number;
+  valor_necessario_agente: number;
   atualizado_por_id: string | null;
   atualizado_por_nome: string | null;
   created_at: string;
@@ -333,6 +334,7 @@ export type Database = {
           valor_eventos_anual?: number;
           valor_patrocinios?: number;
           valor_peditorio?: number;
+          valor_necessario_agente?: number;
           atualizado_por_id?: string | null;
           atualizado_por_nome?: string | null;
           created_at?: string;
@@ -519,6 +521,7 @@ export type Database = {
           p_valor_eventos_anual?: number;
           p_valor_patrocinios?: number;
           p_valor_peditorio?: number;
+          p_valor_necessario_agente?: number;
         };
         Returns: AgenteConfig[];
       };

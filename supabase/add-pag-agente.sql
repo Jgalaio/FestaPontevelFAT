@@ -3,12 +3,16 @@ create table if not exists public.agente_config (
   valor_eventos_anual numeric not null default 0,
   valor_patrocinios numeric not null default 0,
   valor_peditorio numeric not null default 0,
+  valor_necessario_agente numeric not null default 0,
   atualizado_por_id uuid references public.utilizadores(id) on delete set null,
   atualizado_por_nome text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint agente_config_singleton check (id)
 );
+
+alter table public.agente_config
+  add column if not exists valor_necessario_agente numeric not null default 0;
 
 create table if not exists public.pagamentos_agente (
   id uuid primary key default gen_random_uuid(),
@@ -47,11 +51,14 @@ begin
 end;
 $$;
 
+drop function if exists public.app_guardar_agente_config(text, numeric, numeric, numeric);
+
 create or replace function public.app_guardar_agente_config(
   p_token text,
   p_valor_eventos_anual numeric default 0,
   p_valor_patrocinios numeric default 0,
-  p_valor_peditorio numeric default 0
+  p_valor_peditorio numeric default 0,
+  p_valor_necessario_agente numeric default 0
 )
 returns setof public.agente_config
 language plpgsql
@@ -65,7 +72,8 @@ begin
 
   if coalesce(p_valor_eventos_anual, 0) < 0
     or coalesce(p_valor_patrocinios, 0) < 0
-    or coalesce(p_valor_peditorio, 0) < 0 then
+    or coalesce(p_valor_peditorio, 0) < 0
+    or coalesce(p_valor_necessario_agente, 0) < 0 then
     raise exception 'Os valores do Pag.Agente não podem ser negativos' using errcode = '22023';
   end if;
 
@@ -74,6 +82,7 @@ begin
     valor_eventos_anual,
     valor_patrocinios,
     valor_peditorio,
+    valor_necessario_agente,
     atualizado_por_id,
     atualizado_por_nome,
     updated_at
@@ -83,6 +92,7 @@ begin
     coalesce(p_valor_eventos_anual, 0),
     coalesce(p_valor_patrocinios, 0),
     coalesce(p_valor_peditorio, 0),
+    coalesce(p_valor_necessario_agente, 0),
     actor.utilizador_id,
     actor.nome,
     now()
@@ -91,6 +101,7 @@ begin
   set valor_eventos_anual = excluded.valor_eventos_anual,
       valor_patrocinios = excluded.valor_patrocinios,
       valor_peditorio = excluded.valor_peditorio,
+      valor_necessario_agente = excluded.valor_necessario_agente,
       atualizado_por_id = excluded.atualizado_por_id,
       atualizado_por_nome = excluded.atualizado_por_nome,
       updated_at = now();

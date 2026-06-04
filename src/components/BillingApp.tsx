@@ -95,6 +95,7 @@ type AgenteConfigForm = {
   valorEventosAnual: string;
   valorPatrocinios: string;
   valorPeditorio: string;
+  valorNecessarioAgente: string;
 };
 
 type PagamentoAgenteForm = {
@@ -178,11 +179,23 @@ const baseAgenteConfig: AgenteConfig = {
   valor_eventos_anual: 0,
   valor_patrocinios: 0,
   valor_peditorio: 0,
+  valor_necessario_agente: 0,
   atualizado_por_id: null,
   atualizado_por_nome: "Sistema",
   created_at: "2026-06-03T00:00:00.000Z",
   updated_at: "2026-06-03T00:00:00.000Z"
 };
+
+function normalizeAgenteConfig(config?: Partial<AgenteConfig> | null): AgenteConfig {
+  return {
+    ...baseAgenteConfig,
+    ...config,
+    valor_eventos_anual: Number(config?.valor_eventos_anual ?? 0),
+    valor_patrocinios: Number(config?.valor_patrocinios ?? 0),
+    valor_peditorio: Number(config?.valor_peditorio ?? 0),
+    valor_necessario_agente: Number(config?.valor_necessario_agente ?? 0)
+  };
+}
 
 function makeId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -284,7 +297,8 @@ function agenteConfigToForm(config: AgenteConfig): AgenteConfigForm {
   return {
     valorEventosAnual: String(Number(config.valor_eventos_anual).toFixed(2)),
     valorPatrocinios: String(Number(config.valor_patrocinios).toFixed(2)),
-    valorPeditorio: String(Number(config.valor_peditorio).toFixed(2))
+    valorPeditorio: String(Number(config.valor_peditorio).toFixed(2)),
+    valorNecessarioAgente: String(Number(config.valor_necessario_agente).toFixed(2))
   };
 }
 
@@ -415,7 +429,7 @@ function getNextDespesaNumber(despesas: Pick<DespesaRow, "data" | "numero_despes
 function readDemoStore(): DemoStore {
   if (typeof window === "undefined") {
     return {
-      agenteConfig: baseAgenteConfig,
+      agenteConfig: normalizeAgenteConfig(baseAgenteConfig),
       diasFesta: baseDiasFesta,
       postos: basePostos,
       registos: [],
@@ -429,7 +443,7 @@ function readDemoStore(): DemoStore {
 
   if (!raw) {
     return {
-      agenteConfig: baseAgenteConfig,
+      agenteConfig: normalizeAgenteConfig(baseAgenteConfig),
       diasFesta: baseDiasFesta,
       postos: basePostos,
       registos: [],
@@ -447,7 +461,7 @@ function readDemoStore(): DemoStore {
 
     return {
       diasFesta,
-      agenteConfig: parsed.agenteConfig ?? baseAgenteConfig,
+      agenteConfig: normalizeAgenteConfig(parsed.agenteConfig),
       postos: parsed.postos?.length ? parsed.postos : basePostos,
       registos,
       despesas,
@@ -456,7 +470,7 @@ function readDemoStore(): DemoStore {
     };
   } catch {
     return {
-      agenteConfig: baseAgenteConfig,
+      agenteConfig: normalizeAgenteConfig(baseAgenteConfig),
       diasFesta: baseDiasFesta,
       postos: basePostos,
       registos: [],
@@ -879,9 +893,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     Number(agenteConfig.valor_eventos_anual) +
     Number(agenteConfig.valor_patrocinios) +
     Number(agenteConfig.valor_peditorio);
-  const agenteTotalDisponivel = agenteValoresBase + dailySaldo;
+  const agenteTotalCalculado = agenteValoresBase + dailySaldo;
+  const agenteValorNecessario = Number(agenteConfig.valor_necessario_agente);
   const agenteTotalEntregue = pagamentosAgente.reduce((acc, pagamento) => acc + Number(pagamento.valor), 0);
-  const agenteSaldoPorEntregar = agenteTotalDisponivel - agenteTotalEntregue;
+  const agenteFaltaPagar = Math.max(agenteValorNecessario - agenteTotalEntregue, 0);
+  const agentePagoAMais = Math.max(agenteTotalEntregue - agenteValorNecessario, 0);
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -933,7 +949,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const loadAgentData = useCallback(async () => {
     if (isDemoMode) {
       const store = readDemoStore();
-      const nextConfig = store.agenteConfig ?? baseAgenteConfig;
+      const nextConfig = normalizeAgenteConfig(store.agenteConfig);
 
       setAgenteConfig(nextConfig);
       setAgenteConfigForm(agenteConfigToForm(nextConfig));
@@ -942,8 +958,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     }
 
     if (!supabase || !sessionToken) {
-      setAgenteConfig(baseAgenteConfig);
-      setAgenteConfigForm(agenteConfigToForm(baseAgenteConfig));
+      const nextConfig = normalizeAgenteConfig(baseAgenteConfig);
+
+      setAgenteConfig(nextConfig);
+      setAgenteConfigForm(agenteConfigToForm(nextConfig));
       setPagamentosAgente([]);
       return;
     }
@@ -963,7 +981,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    const nextConfig = configResult.data?.[0] ?? baseAgenteConfig;
+    const nextConfig = normalizeAgenteConfig(configResult.data?.[0]);
 
     setAgenteConfig(nextConfig);
     setAgenteConfigForm(agenteConfigToForm(nextConfig));
@@ -2043,8 +2061,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     const valorEventosAnual = parseMoney(agenteConfigForm.valorEventosAnual);
     const valorPatrocinios = parseMoney(agenteConfigForm.valorPatrocinios);
     const valorPeditorio = parseMoney(agenteConfigForm.valorPeditorio);
+    const valorNecessarioAgente = parseMoney(agenteConfigForm.valorNecessarioAgente);
 
-    if (valorEventosAnual < 0 || valorPatrocinios < 0 || valorPeditorio < 0) {
+    if (valorEventosAnual < 0 || valorPatrocinios < 0 || valorPeditorio < 0 || valorNecessarioAgente < 0) {
       setError("Os valores do Pag.Agente não podem ser negativos.");
       return;
     }
@@ -2057,6 +2076,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         valor_eventos_anual: valorEventosAnual,
         valor_patrocinios: valorPatrocinios,
         valor_peditorio: valorPeditorio,
+        valor_necessario_agente: valorNecessarioAgente,
         atualizado_por_id: null,
         atualizado_por_nome: currentUserName,
         updated_at: now
@@ -2079,7 +2099,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       p_token: sessionToken,
       p_valor_eventos_anual: valorEventosAnual,
       p_valor_patrocinios: valorPatrocinios,
-      p_valor_peditorio: valorPeditorio
+      p_valor_peditorio: valorPeditorio,
+      p_valor_necessario_agente: valorNecessarioAgente
     });
 
     setAgenteConfigSaving(false);
@@ -2089,8 +2110,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    setAgenteConfig(data[0]);
-    setAgenteConfigForm(agenteConfigToForm(data[0]));
+    const nextConfig = normalizeAgenteConfig(data[0]);
+
+    setAgenteConfig(nextConfig);
+    setAgenteConfigForm(agenteConfigToForm(nextConfig));
     setNotice("Valores do Pag.Agente guardados.");
   }
 
@@ -2777,19 +2800,21 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         <>
           <section className="summary-grid" aria-label="Totais Pag.Agente">
             <article className="metric metric-total">
-              <span>Total a entregar</span>
-              <strong>{formatCurrency(agenteTotalDisponivel)}</strong>
-              <small>Valores base + saldo da festa</small>
+              <span>Valor necessário</span>
+              <strong>{formatCurrency(agenteValorNecessario)}</strong>
+              <small>Definido na Gestão</small>
             </article>
             <article className="metric metric-total">
-              <span>Total entregue</span>
+              <span>Já pago</span>
               <strong>{formatCurrency(agenteTotalEntregue)}</strong>
               <small>{pagamentosAgente.length} entregas registadas</small>
             </article>
             <article className="metric metric-total">
-              <span>Por entregar</span>
-              <strong>{formatCurrency(agenteSaldoPorEntregar)}</strong>
-              <small>Saldo atual do agente</small>
+              <span>Falta pagar</span>
+              <strong>{formatCurrency(agenteFaltaPagar)}</strong>
+              <small>
+                {agentePagoAMais > 0 ? `Pago a mais: ${formatCurrency(agentePagoAMais)}` : "Por liquidar ao agente"}
+              </small>
             </article>
             <article className="metric">
               <span>Eventos anual</span>
@@ -2808,8 +2833,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <strong>{formatCurrency(dailySaldo)}</strong>
             </article>
             <article className="metric">
-              <span>Valores base</span>
-              <strong>{formatCurrency(agenteValoresBase)}</strong>
+              <span>Total calculado</span>
+              <strong>{formatCurrency(agenteTotalCalculado)}</strong>
+              <small>Valores base + saldo da festa</small>
             </article>
           </section>
 
@@ -3327,12 +3353,25 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   <p className="eyebrow">Pag.Agente</p>
                   <h2>Valores base</h2>
                   <span className="panel-subtitle">
-                    Estes valores entram no cálculo do total a entregar ao agente.
+                    Define o valor necessário ao agente e os valores de apoio da festa.
                   </span>
                 </div>
               </div>
 
               <form className="agente-form" onSubmit={handleSaveAgenteConfig}>
+                <label>
+                  Valor necessário ao agente
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={agenteConfigForm.valorNecessarioAgente}
+                    onChange={(event) =>
+                      setAgenteConfigForm((current) => ({ ...current, valorNecessarioAgente: event.target.value }))
+                    }
+                  />
+                </label>
                 <label>
                   Valor Eventos Anual
                   <input
@@ -3381,6 +3420,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </form>
 
               <div className="summary-grid management-summary">
+                <article className="metric">
+                  <span>Valor necessário</span>
+                  <strong>{formatCurrency(agenteValorNecessario)}</strong>
+                </article>
                 <article className="metric">
                   <span>Eventos anual</span>
                   <strong>{formatCurrency(Number(agenteConfig.valor_eventos_anual))}</strong>
