@@ -1,6 +1,7 @@
 # Faturação Pontevel
 
 Sistema web para registo diário da faturação da Festa de Pontével por posto.
+Inclui overview global, registo por posto, gestão e relatório diário pronto para impressão.
 
 ## Stack
 

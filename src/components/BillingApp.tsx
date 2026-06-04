@@ -7,11 +7,13 @@ import {
   Building2,
   CalendarDays,
   Euro,
+  FileText,
   Home,
   KeyRound,
   LogOut,
   Pencil,
   Plus,
+  Printer,
   Receipt,
   RefreshCw,
   Save,
@@ -50,7 +52,7 @@ type DemoStore = {
 
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "dias" | "postos" | "tipos" | "utilizadores";
-type BillingAppMode = "overview" | "register" | "management";
+type BillingAppMode = "overview" | "register" | "management" | "reports";
 type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
 type BillingAppProps = {
@@ -456,6 +458,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const isOverviewMode = mode === "overview";
   const isRegisterMode = mode === "register";
   const isManagementMode = mode === "management";
+  const isReportsMode = mode === "reports";
   const startDate = useMemo(() => todayISO(), []);
 
   const [appSession, setAppSession] = useState<AppSession | null>(null);
@@ -576,6 +579,51 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     return next;
   }, [despesas, registos]);
+
+  const reportPostoRows = useMemo(() => {
+    const postoIds = new Set<string>();
+
+    for (const posto of activePostos) {
+      postoIds.add(posto.id);
+    }
+
+    for (const registo of registos) {
+      postoIds.add(registo.posto_id);
+    }
+
+    for (const despesa of despesas) {
+      postoIds.add(despesa.posto_id);
+    }
+
+    return Array.from(postoIds)
+      .map((postoId) => {
+        const posto =
+          postos.find((item) => item.id === postoId) ??
+          registos.find((registo) => registo.posto_id === postoId)?.postos ??
+          despesas.find((despesa) => despesa.posto_id === postoId)?.postos ??
+          null;
+        const registo = registos.find((item) => item.posto_id === postoId) ?? null;
+        const postoDespesas = despesas.filter((despesa) => despesa.posto_id === postoId);
+        const dinheiro = Number(registo?.dinheiro ?? 0);
+        const multibanco = Number(registo?.multibanco ?? 0);
+        const mbway = Number(registo?.mbway ?? 0);
+        const faturacao = dinheiro + multibanco + mbway;
+        const despesasTotal = postoDespesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
+
+        return {
+          postoId,
+          nome: posto?.nome ?? "Posto removido",
+          responsavel: posto?.responsavel ?? "",
+          dinheiro,
+          multibanco,
+          mbway,
+          faturacao,
+          despesas: despesasTotal,
+          saldo: faturacao - despesasTotal
+        };
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [activePostos, despesas, postos, registos]);
 
   const activeTiposDespesa = useMemo(
     () => tiposDespesa.filter((tipo) => tipo.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
@@ -1914,11 +1962,19 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       <header className="topbar">
         <div>
           <p className="eyebrow">Festa de Pontével</p>
-          <h1>{isOverviewMode ? "Overview da festa" : isRegisterMode ? "Registo diário" : "Gestão"}</h1>
+          <h1>
+            {isOverviewMode
+              ? "Overview da festa"
+              : isRegisterMode
+                ? "Registo diário"
+                : isReportsMode
+                  ? "Relatórios"
+                  : "Gestão"}
+          </h1>
         </div>
 
         <div className="top-actions">
-          {isRegisterMode ? (
+          {isRegisterMode || isReportsMode ? (
             <label className="date-control">
               <CalendarDays size={18} aria-hidden="true" />
               <select value={selectedDia?.data ?? ""} onChange={(event) => handleSelectDia(event.target.value)}>
@@ -1953,6 +2009,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         <Link className={`app-nav-link ${isRegisterMode ? "active" : ""}`} href="/registo">
           <Euro size={18} aria-hidden="true" />
           Registo
+        </Link>
+        <Link className={`app-nav-link ${isReportsMode ? "active" : ""}`} href="/relatorios">
+          <FileText size={18} aria-hidden="true" />
+          Relatórios
         </Link>
         <Link className={`app-nav-link ${isManagementMode ? "active" : ""}`} href="/gestao">
           <Settings size={18} aria-hidden="true" />
@@ -2135,6 +2195,236 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </section>
       ) : null}
 
+      {isReportsMode ? (
+        <section className="panel report-panel">
+          <div className="panel-heading table-heading no-print">
+            <div>
+              <p className="eyebrow">Relatório de impressão</p>
+              <h2>{selectedDayLabel}</h2>
+            </div>
+            <div className="report-actions">
+              <button className="icon-text-button" type="button" onClick={() => void loadData()} disabled={loading}>
+                <RefreshCw size={18} className={loading ? "spin" : ""} aria-hidden="true" />
+                Atualizar
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => window.print()}
+                disabled={loading || !selectedDia}
+              >
+                <Printer size={18} aria-hidden="true" />
+                Imprimir
+              </button>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="empty-state">A carregar relatório.</div>
+          ) : !selectedDia ? (
+            <div className="empty-state">Cria primeiro um dia da festa na Gestão.</div>
+          ) : (
+            <article className="report-document">
+              <header className="report-header">
+                <div>
+                  <p className="eyebrow">Festa de Pontével</p>
+                  <h2>Relatório diário</h2>
+                  <span>{selectedDayLabel}</span>
+                </div>
+                <div className="report-stamp">
+                  <strong>{selectedDia.fechado ? "Dia fechado" : "Dia aberto"}</strong>
+                  <span>Gerado por {currentUserName}</span>
+                  <span>{formatDateTimeLabel(new Date().toISOString())}</span>
+                </div>
+              </header>
+
+              <section className="report-summary" aria-label="Totais do relatório">
+                <div className="report-summary-card featured">
+                  <span>Faturação</span>
+                  <strong>{formatCurrency(dailyTotals.total)}</strong>
+                </div>
+                <div className="report-summary-card featured">
+                  <span>Despesas</span>
+                  <strong>{formatCurrency(dailyDespesasTotal)}</strong>
+                </div>
+                <div className="report-summary-card featured">
+                  <span>Saldo</span>
+                  <strong>{formatCurrency(dailySaldo)}</strong>
+                </div>
+                <div className="report-summary-card">
+                  <span>Dinheiro</span>
+                  <strong>{formatCurrency(dailyTotals.dinheiro)}</strong>
+                </div>
+                <div className="report-summary-card">
+                  <span>Multibanco</span>
+                  <strong>{formatCurrency(dailyTotals.multibanco)}</strong>
+                </div>
+                <div className="report-summary-card">
+                  <span>MB Way</span>
+                  <strong>{formatCurrency(dailyTotals.mbway)}</strong>
+                </div>
+                <div className="report-summary-card">
+                  <span>Desp. dinheiro</span>
+                  <strong>{formatCurrency(dailyExpensePaymentTotals.dinheiro)}</strong>
+                </div>
+                <div className="report-summary-card">
+                  <span>Desp. transferência</span>
+                  <strong>{formatCurrency(dailyExpensePaymentTotals.transferencia)}</strong>
+                </div>
+              </section>
+
+              <section className="report-section">
+                <div className="report-section-heading">
+                  <h3>Resumo por posto</h3>
+                  <span>{reportPostoRows.length} postos</span>
+                </div>
+                <div className="table-wrap">
+                  <table className="report-table">
+                    <thead>
+                      <tr>
+                        <th>Posto</th>
+                        <th>Dinheiro</th>
+                        <th>Multibanco</th>
+                        <th>MB Way</th>
+                        <th>Faturação</th>
+                        <th>Despesas</th>
+                        <th>Saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportPostoRows.map((posto) => (
+                        <tr key={posto.postoId}>
+                          <td>
+                            <strong>{posto.nome}</strong>
+                            <span>{posto.responsavel}</span>
+                          </td>
+                          <td>{formatCurrency(posto.dinheiro)}</td>
+                          <td>{formatCurrency(posto.multibanco)}</td>
+                          <td>{formatCurrency(posto.mbway)}</td>
+                          <td>
+                            <strong>{formatCurrency(posto.faturacao)}</strong>
+                          </td>
+                          <td>{formatCurrency(posto.despesas)}</td>
+                          <td>
+                            <strong>{formatCurrency(posto.saldo)}</strong>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="report-section">
+                <div className="report-section-heading">
+                  <h3>Faturação registada</h3>
+                  <span>{registos.length} registos</span>
+                </div>
+                {registos.length ? (
+                  <div className="table-wrap">
+                    <table className="report-table">
+                      <thead>
+                        <tr>
+                          <th>Posto</th>
+                          <th>Dinheiro</th>
+                          <th>Multibanco</th>
+                          <th>MB Way</th>
+                          <th>Total</th>
+                          <th>Alterado por</th>
+                          <th>Observações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {registos.map((registo) => {
+                          const total =
+                            Number(registo.dinheiro) + Number(registo.multibanco) + Number(registo.mbway);
+
+                          return (
+                            <tr key={registo.id}>
+                              <td>
+                                <strong>{registo.postos?.nome ?? "Posto removido"}</strong>
+                                <span>{registo.postos?.responsavel ?? ""}</span>
+                              </td>
+                              <td>{formatCurrency(Number(registo.dinheiro))}</td>
+                              <td>{formatCurrency(Number(registo.multibanco))}</td>
+                              <td>{formatCurrency(Number(registo.mbway))}</td>
+                              <td>
+                                <strong>{formatCurrency(total)}</strong>
+                              </td>
+                              <td className="audit-cell">
+                                <strong>{registo.atualizado_por_nome ?? registo.criado_por_nome ?? "Sem utilizador"}</strong>
+                                <span>{formatDateTimeLabel(registo.updated_at)}</span>
+                              </td>
+                              <td>{registo.observacoes || ""}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="empty-state compact">Sem faturação registada neste dia.</div>
+                )}
+              </section>
+
+              <section className="report-section">
+                <div className="report-section-heading">
+                  <h3>Despesas registadas</h3>
+                  <span>{despesas.length} despesas</span>
+                </div>
+                {despesas.length ? (
+                  <div className="table-wrap">
+                    <table className="report-table">
+                      <thead>
+                        <tr>
+                          <th>Posto</th>
+                          <th>Tipo</th>
+                          <th>Nº despesa</th>
+                          <th>Valor</th>
+                          <th>FAT c/ NIF</th>
+                          <th>Pagamento</th>
+                          <th>Fatura</th>
+                          <th>Alterado por</th>
+                          <th>Observações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {despesas.map((despesa) => (
+                          <tr key={despesa.id}>
+                            <td>
+                              <strong>{despesa.postos?.nome ?? "Posto removido"}</strong>
+                              <span>{despesa.postos?.responsavel ?? ""}</span>
+                            </td>
+                            <td>{despesa.tipo_despesa}</td>
+                            <td>{despesa.numero_despesa}</td>
+                            <td>
+                              <strong>{formatCurrency(Number(despesa.valor))}</strong>
+                            </td>
+                            <td>{despesa.fat_com_nif ? "Sim" : "Não"}</td>
+                            <td>{formatTipoPagamento(despesa.tipo_pagamento)}</td>
+                            <td className="audit-cell">
+                              <strong>{despesa.fatura_paga ? "Paga" : "Por pagar"}</strong>
+                              <span>{despesa.numero_fatura ?? ""}</span>
+                            </td>
+                            <td className="audit-cell">
+                              <strong>{despesa.atualizado_por_nome ?? despesa.criado_por_nome ?? "Sem utilizador"}</strong>
+                              <span>{formatDateTimeLabel(despesa.updated_at)}</span>
+                            </td>
+                            <td>{despesa.observacoes || ""}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="empty-state compact">Sem despesas registadas neste dia.</div>
+                )}
+              </section>
+            </article>
+          )}
+        </section>
+      ) : null}
+
       {isRegisterMode ? (
         <section className="posto-folder" aria-label="Postos">
           {activePostos.length ? (
@@ -2164,7 +2454,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </section>
       ) : null}
 
-      {!isOverviewMode ? (
+      {!isOverviewMode && !isReportsMode ? (
         <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
           {isRegisterMode ? (
             <section className="panel entry-panel">
