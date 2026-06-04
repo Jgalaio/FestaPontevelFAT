@@ -596,15 +596,68 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     );
   }, [despesas]);
 
-  const postosRegistados = useMemo(
-    () => new Set(registos.map((registo) => registo.posto_id)).size,
-    [registos]
-  );
+  const overviewDayFinancials = useMemo(() => {
+    const next = new Map<
+      string,
+      {
+        despesas: number;
+        despesasDinheiro: number;
+        despesasTransferencia: number;
+        dinheiro: number;
+        faturacao: number;
+        mbway: number;
+        multibanco: number;
+        postosRegistados: number;
+      }
+    >();
+    const postosPorDia = new Map<string, Set<string>>();
 
-  const registeredPostoIds = useMemo(
-    () => new Set(registos.map((registo) => registo.posto_id)),
-    [registos]
-  );
+    function ensureSummary(data: string) {
+      const current =
+        next.get(data) ??
+        {
+          despesas: 0,
+          despesasDinheiro: 0,
+          despesasTransferencia: 0,
+          dinheiro: 0,
+          faturacao: 0,
+          mbway: 0,
+          multibanco: 0,
+          postosRegistados: 0
+        };
+
+      next.set(data, current);
+      return current;
+    }
+
+    for (const registo of registos) {
+      const current = ensureSummary(registo.data);
+      const postos = postosPorDia.get(registo.data) ?? new Set<string>();
+
+      postos.add(registo.posto_id);
+      postosPorDia.set(registo.data, postos);
+      current.postosRegistados = postos.size;
+      current.dinheiro += Number(registo.dinheiro);
+      current.multibanco += Number(registo.multibanco);
+      current.mbway += Number(registo.mbway);
+      current.faturacao += Number(registo.dinheiro) + Number(registo.multibanco) + Number(registo.mbway);
+    }
+
+    for (const despesa of despesas) {
+      const current = ensureSummary(despesa.data);
+      const valor = Number(despesa.valor);
+
+      current.despesas += valor;
+
+      if (normalizeTipoPagamento(despesa.tipo_pagamento) === "transferencia") {
+        current.despesasTransferencia += valor;
+      } else {
+        current.despesasDinheiro += valor;
+      }
+    }
+
+    return next;
+  }, [despesas, registos]);
 
   const dailySaldo = dailyTotals.total - dailyDespesasTotal;
   const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
@@ -673,10 +726,16 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       }
       setPostos(store.postos);
       setTiposDespesa(store.tiposDespesa);
-      setRegistos(attachPostos(store.registos.filter((registo) => registo.data === effectiveDate), store.postos));
-      setDespesas(
-        attachPostosToDespesas(store.despesas.filter((despesa) => despesa.data === effectiveDate), store.postos)
-      );
+
+      if (isOverviewMode) {
+        setRegistos(attachPostos(store.registos, store.postos));
+        setDespesas(attachPostosToDespesas(store.despesas, store.postos));
+      } else {
+        setRegistos(attachPostos(store.registos.filter((registo) => registo.data === effectiveDate), store.postos));
+        setDespesas(
+          attachPostosToDespesas(store.despesas.filter((despesa) => despesa.data === effectiveDate), store.postos)
+        );
+      }
       return;
     }
 
@@ -724,6 +783,43 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setTiposDespesa(tiposDespesaResult.data?.length ? tiposDespesaResult.data : baseTiposDespesa);
 
+    if (isOverviewMode) {
+      if (!nextDias.length) {
+        setRegistos([]);
+        setDespesas([]);
+        setLoading(false);
+        return;
+      }
+
+      const [registosResults, despesasResults] = await Promise.all([
+        Promise.all(
+          nextDias.map((dia) => supabase.rpc("app_listar_registos", { p_token: sessionToken, p_data: dia.data }))
+        ),
+        Promise.all(
+          nextDias.map((dia) => supabase.rpc("app_listar_despesas", { p_token: sessionToken, p_data: dia.data }))
+        )
+      ]);
+
+      setLoading(false);
+
+      const registosError = registosResults.find((result) => result.error)?.error;
+      const despesasError = despesasResults.find((result) => result.error)?.error;
+
+      if (registosError) {
+        setError(registosError.message);
+        return;
+      }
+
+      if (despesasError) {
+        setError(despesasError.message);
+        return;
+      }
+
+      setRegistos(registosResults.flatMap((result) => result.data ?? []).map(mapRegistoRpc));
+      setDespesas(despesasResults.flatMap((result) => result.data ?? []).map(mapDespesaRpc));
+      return;
+    }
+
     if (!effectiveDate) {
       setRegistos([]);
       setDespesas([]);
@@ -750,7 +846,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setRegistos((registosResult.data ?? []).map(mapRegistoRpc));
     setDespesas((despesasResult.data ?? []).map(mapDespesaRpc));
-  }, [isDemoMode, selectedDate, sessionToken, supabase]);
+  }, [isDemoMode, isOverviewMode, selectedDate, sessionToken, supabase]);
 
   useEffect(() => {
     if (!supabase) {
@@ -1786,11 +1882,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       <header className="topbar">
         <div>
           <p className="eyebrow">Festa de Pontével</p>
-          <h1>{isOverviewMode ? "Overview diário" : isRegisterMode ? "Registo diário" : "Gestão"}</h1>
+          <h1>{isOverviewMode ? "Overview da festa" : isRegisterMode ? "Registo diário" : "Gestão"}</h1>
         </div>
 
         <div className="top-actions">
-          {!isManagementMode ? (
+          {isRegisterMode ? (
             <label className="date-control">
               <CalendarDays size={18} aria-hidden="true" />
               <select value={selectedDia?.data ?? ""} onChange={(event) => handleSelectDia(event.target.value)}>
@@ -1833,11 +1929,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       </nav>
 
       {isOverviewMode ? (
-        <section className="summary-grid" aria-label="Totais do dia">
+        <section className="summary-grid" aria-label="Totais da festa">
           <article className="metric metric-total">
-            <span>Total do dia</span>
+            <span>Total da festa</span>
             <strong>{formatCurrency(dailyTotals.total)}</strong>
-            <small>{selectedDayLabel}</small>
+            <small>{orderedDiasFesta.length} dias criados</small>
           </article>
           <article className="metric">
             <span>Despesas</span>
@@ -1868,14 +1964,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <strong>{formatCurrency(dailyTotals.mbway)}</strong>
           </article>
           <article className="metric">
-            <span>Postos registados</span>
-            <strong>
-              {postosRegistados}/{activePostos.length}
-            </strong>
+            <span>Dias criados</span>
+            <strong>{orderedDiasFesta.length}</strong>
           </article>
           <article className="metric">
-            <span>Estado do dia</span>
-            <strong>{isSelectedDayClosed ? "Fechado" : selectedDia ? "Aberto" : "Sem dia"}</strong>
+            <span>Dias fechados</span>
+            <strong>
+              {orderedDiasFesta.filter((dia) => dia.fechado).length}/{orderedDiasFesta.length}
+            </strong>
           </article>
         </section>
       ) : null}
@@ -1931,7 +2027,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <div className="panel-heading table-heading">
             <div>
               <p className="eyebrow">Overview</p>
-              <h2>{selectedDayLabel}</h2>
+              <h2>Todos os dias</h2>
             </div>
             <Link className="icon-text-button" href="/registo">
               <Euro size={18} aria-hidden="true" />
@@ -1941,39 +2037,45 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
           {loading ? (
             <div className="empty-state">A carregar overview.</div>
-          ) : !selectedDia ? (
+          ) : !orderedDiasFesta.length ? (
             <div className="empty-state">Cria primeiro um dia da festa na Gestão.</div>
-          ) : activePostos.length ? (
+          ) : (
             <div className="table-wrap">
               <table className="overview-table">
                 <thead>
                   <tr>
-                    <th>Posto</th>
+                    <th>Dia</th>
                     <th>Faturação</th>
                     <th>Despesas</th>
                     <th>Saldo</th>
+                    <th>Pago dinheiro</th>
+                    <th>Pago transf.</th>
                     <th>Dinheiro</th>
                     <th>Multibanco</th>
                     <th>MB Way</th>
+                    <th>Postos</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {activePostos.map((posto) => {
-                    const summary = postoFinancials.get(posto.id) ?? {
+                  {orderedDiasFesta.map((dia) => {
+                    const summary = overviewDayFinancials.get(dia.data) ?? {
                       despesas: 0,
+                      despesasDinheiro: 0,
+                      despesasTransferencia: 0,
                       dinheiro: 0,
                       faturacao: 0,
                       mbway: 0,
-                      multibanco: 0
+                      multibanco: 0,
+                      postosRegistados: 0
                     };
                     const saldo = summary.faturacao - summary.despesas;
 
                     return (
-                      <tr key={posto.id}>
+                      <tr key={dia.id}>
                         <td>
-                          <strong>{posto.nome}</strong>
-                          <span>{posto.responsavel || "Sem responsável"}</span>
+                          <strong>{dia.nome}</strong>
+                          <span>{formatDateLabel(dia.data)}</span>
                         </td>
                         <td>
                           <strong>{formatCurrency(summary.faturacao)}</strong>
@@ -1982,18 +2084,21 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                         <td>
                           <strong>{formatCurrency(saldo)}</strong>
                         </td>
+                        <td>{formatCurrency(summary.despesasDinheiro)}</td>
+                        <td>{formatCurrency(summary.despesasTransferencia)}</td>
                         <td>{formatCurrency(summary.dinheiro)}</td>
                         <td>{formatCurrency(summary.multibanco)}</td>
                         <td>{formatCurrency(summary.mbway)}</td>
-                        <td>{registeredPostoIds.has(posto.id) ? "Registado" : "Por registar"}</td>
+                        <td>
+                          {summary.postosRegistados}/{activePostos.length}
+                        </td>
+                        <td>{dia.fechado ? "Fechado" : "Aberto"}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-          ) : (
-            <div className="empty-state">Sem postos ativos.</div>
           )}
         </section>
       ) : null}
