@@ -609,6 +609,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesa[]>(baseTiposDespesa);
   const [utilizadores, setUtilizadores] = useState<Utilizador[]>([]);
+  const [editingRegisto, setEditingRegisto] = useState<Registo | null>(null);
   const [agenteConfig, setAgenteConfig] = useState<AgenteConfig>(baseAgenteConfig);
   const [pagamentosAgente, setPagamentosAgente] = useState<PagamentoAgente[]>([]);
   const [agenteConfigForm, setAgenteConfigForm] = useState<AgenteConfigForm>(() =>
@@ -891,6 +892,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
   const dailySaldo = dailyTotals.total - dailyDespesasTotal;
   const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
+  const isEditingRegisto = Boolean(editingRegisto);
   const agenteValoresBase =
     Number(agenteConfig.valor_eventos_anual) +
     Number(agenteConfig.valor_patrocinios) +
@@ -1297,14 +1299,23 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }
 
   function handleSelectDia(value: string) {
+    setEditingRegisto(null);
     setSelectedDate(value);
-    setForm((current) => ({ ...current, data: value }));
+    setForm((current) =>
+      isEditingRegisto ? { ...emptyForm(value), postoId: current.postoId } : { ...current, data: value }
+    );
     setDespesaForm((current) => ({ ...current, data: value }));
   }
 
   function handleSelectPosto(postoId: string) {
-    setForm((current) => ({ ...current, postoId }));
+    setEditingRegisto(null);
+    setForm((current) => (isEditingRegisto ? { ...emptyForm(current.data), postoId } : { ...current, postoId }));
     setDespesaForm((current) => ({ ...current, postoId }));
+  }
+
+  function handleCancelEditRegisto() {
+    setEditingRegisto(null);
+    setForm((current) => ({ ...emptyForm(current.data), postoId: current.postoId }));
   }
 
   async function handleSaveDia(event: FormEvent<HTMLFormElement>) {
@@ -1718,13 +1729,30 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    const existingRegistoForForm =
+      registos.find((registo) => registo.posto_id === form.postoId && registo.data === selectedDia.data) ?? null;
+
+    if (existingRegistoForForm && !isEditingRegisto) {
+      setSaving(false);
+      setError("Este posto já tem faturação neste dia. Usa o botão editar para guardar alterações.");
+      return;
+    }
+
+    const descricaoAlteracao = form.observacoes.trim();
+
+    if (isEditingRegisto && !descricaoAlteracao) {
+      setSaving(false);
+      setError("Descreve o que foi alterado antes de guardar as alterações.");
+      return;
+    }
+
     const payload = {
       posto_id: form.postoId,
       data: selectedDia.data,
       dinheiro: parseMoney(form.dinheiro),
       multibanco: parseMoney(form.multibanco),
       mbway: parseMoney(form.mbway),
-      observacoes: form.observacoes.trim() || null
+      observacoes: descricaoAlteracao ? `${isEditingRegisto ? "Alteração: " : ""}${descricaoAlteracao}` : null
     };
 
     if (isDemoMode) {
@@ -1751,7 +1779,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           : [...store.registos, nextRegisto];
 
       writeDemoStore({ ...store, registos: nextRegistos });
-      setNotice("Registo guardado.");
+      setNotice(isEditingRegisto ? "Alterações guardadas." : "Registo guardado.");
+      setEditingRegisto(null);
       setForm((current) => ({ ...emptyForm(current.data), postoId: current.postoId }));
       setSaving(false);
       await loadData();
@@ -1780,7 +1809,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    setNotice("Registo guardado.");
+    setNotice(isEditingRegisto ? "Alterações guardadas." : "Registo guardado.");
+    setEditingRegisto(null);
     setForm((current) => ({ ...emptyForm(current.data), postoId: current.postoId }));
     await loadData();
   }
@@ -1806,6 +1836,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         ...store,
         registos: store.registos.filter((registo) => registo.id !== id)
       });
+      if (editingRegisto?.id === id) {
+        handleCancelEditRegisto();
+      }
       setNotice("Registo apagado.");
       await loadData();
       return;
@@ -1825,6 +1858,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    if (editingRegisto?.id === id) {
+      handleCancelEditRegisto();
+    }
     setNotice("Registo apagado.");
     await loadData();
   }
@@ -1835,15 +1871,20 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    setEntryTab("faturacao");
+    setEditingRegisto(registo);
     setForm({
       postoId: registo.posto_id,
       data: registo.data,
       dinheiro: String(Number(registo.dinheiro).toFixed(2)),
       multibanco: String(Number(registo.multibanco).toFixed(2)),
       mbway: String(Number(registo.mbway).toFixed(2)),
-      observacoes: registo.observacoes ?? ""
+      observacoes: ""
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("entry-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function handleDespesaImageChange(event: ChangeEvent<HTMLInputElement>) {
@@ -2984,7 +3025,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       {!isOverviewMode && !isReportsMode && !isAgentMode ? (
         <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
           {isRegisterMode ? (
-            <section className="panel entry-panel">
+            <section className="panel entry-panel" id="entry-panel">
               <div className="side-tabs entry-tabs" role="tablist" aria-label="Tipo de registo">
                 <button
                   className={`tab-button ${entryTab === "faturacao" ? "active" : ""}`}
@@ -2997,7 +3038,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 <button
                   className={`tab-button ${entryTab === "despesas" ? "active" : ""}`}
                   type="button"
-                  onClick={() => setEntryTab("despesas")}
+                  onClick={() => {
+                    setEntryTab("despesas");
+                    setEditingRegisto(null);
+                  }}
                 >
                   <Receipt size={18} aria-hidden="true" />
                   Despesas
@@ -3014,7 +3058,13 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 </div>
                 <div>
                   <p className="eyebrow">{selectedPosto?.nome ?? "Sem posto selecionado"}</p>
-                  <h2>{entryTab === "faturacao" ? "Faturação" : "Despesas"}</h2>
+                  <h2>
+                    {entryTab === "faturacao" && isEditingRegisto
+                      ? "Editar faturação"
+                      : entryTab === "faturacao"
+                        ? "Faturação"
+                        : "Despesas"}
+                  </h2>
                   {selectedPosto?.responsavel ? (
                     <span className="panel-subtitle">{selectedPosto.responsavel}</span>
                   ) : null}
@@ -3027,6 +3077,23 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     Dia
                     <input value={selectedDayLabel} readOnly disabled />
                   </label>
+
+                  {isEditingRegisto ? (
+                    <div className="edit-menu wide-field">
+                      <div>
+                        <strong>Menu de edição</strong>
+                        <span>
+                          {editingRegisto?.postos?.nome ?? selectedPosto?.nome ?? "Posto"} ·{" "}
+                          {formatDateLabel(editingRegisto?.data ?? selectedDia?.data ?? selectedDate)}
+                        </span>
+                        {editingRegisto?.observacoes ? <small>Anterior: {editingRegisto.observacoes}</small> : null}
+                      </div>
+                      <button className="icon-text-button" type="button" onClick={handleCancelEditRegisto}>
+                        <X size={18} aria-hidden="true" />
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : null}
 
               <label>
                 Dinheiro
@@ -3065,22 +3132,38 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </label>
 
               <label className="wide-field">
-                Observações
+                {isEditingRegisto ? "Descrição da alteração" : "Observações"}
                 <textarea
                   value={form.observacoes}
                   onChange={(event) => setForm((current) => ({ ...current, observacoes: event.target.value }))}
+                  placeholder={isEditingRegisto ? "Ex.: Corrigido o valor do dinheiro de 100,00 para 120,00" : ""}
+                  required={isEditingRegisto}
                   rows={3}
                 />
               </label>
 
-              <button
-                className="primary-button wide-field"
-                type="submit"
-                disabled={saving || !activePostos.length || !canEditSelectedDay}
-              >
-                <Save size={18} aria-hidden="true" />
-                {isSelectedDayClosed ? "Dia fechado" : saving ? "A guardar" : "Guardar registo"}
-              </button>
+              <div className="form-actions wide-field">
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={saving || !activePostos.length || !canEditSelectedDay}
+                >
+                  <Save size={18} aria-hidden="true" />
+                  {isSelectedDayClosed
+                    ? "Dia fechado"
+                    : saving
+                      ? "A guardar"
+                      : isEditingRegisto
+                        ? "Guardar alterações"
+                        : "Guardar registo"}
+                </button>
+                {isEditingRegisto ? (
+                  <button className="icon-text-button" type="button" onClick={handleCancelEditRegisto}>
+                    <X size={18} aria-hidden="true" />
+                    Cancelar
+                  </button>
+                ) : null}
+              </div>
             </form>
           ) : (
             <form className="form-grid" onSubmit={handleSaveDespesa}>
