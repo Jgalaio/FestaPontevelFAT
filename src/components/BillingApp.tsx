@@ -1935,9 +1935,13 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <strong>{formatCurrency(dailyTotals.total)}</strong>
             <small>{orderedDiasFesta.length} dias criados</small>
           </article>
-          <article className="metric">
+          <article className="metric metric-total">
             <span>Despesas</span>
             <strong>{formatCurrency(dailyDespesasTotal)}</strong>
+          </article>
+          <article className="metric metric-total">
+            <span>Saldo</span>
+            <strong>{formatCurrency(dailySaldo)}</strong>
           </article>
           <article className="metric">
             <span>Pago dinheiro</span>
@@ -1946,10 +1950,6 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <article className="metric">
             <span>Pago transf.</span>
             <strong>{formatCurrency(dailyExpensePaymentTotals.transferencia)}</strong>
-          </article>
-          <article className="metric">
-            <span>Saldo</span>
-            <strong>{formatCurrency(dailySaldo)}</strong>
           </article>
           <article className="metric">
             <span>Dinheiro</span>
@@ -1983,11 +1983,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <strong>{formatCurrency(selectedTotals.total)}</strong>
             <small>{selectedPosto?.nome ?? selectedDayLabel}</small>
           </article>
-          <article className="metric">
+          <article className="metric metric-total">
             <span>Despesas</span>
             <strong>{formatCurrency(selectedDespesasTotal)}</strong>
           </article>
-          <article className="metric">
+          <article className="metric metric-total">
             <span>Saldo</span>
             <strong>{formatCurrency(selectedSaldo)}</strong>
           </article>
