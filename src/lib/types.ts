@@ -109,6 +109,24 @@ export type PagamentoAgente = {
   created_at: string;
 };
 
+export type NovadisConfig = {
+  id: boolean;
+  valor_barril: number;
+  valor_tara: number;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NovadisBarril = {
+  id: string;
+  quantidade: number;
+  criado_por_id: string | null;
+  criado_por_nome: string;
+  created_at: string;
+};
+
 export type AuditoriaRegisto = {
   id: string;
   registo_id: string | null;
@@ -355,6 +373,32 @@ export type Database = {
         Update: Partial<PagamentoAgente>;
         Relationships: [];
       };
+      novadis_config: {
+        Row: NovadisConfig;
+        Insert: {
+          id?: boolean;
+          valor_barril?: number;
+          valor_tara?: number;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<NovadisConfig>;
+        Relationships: [];
+      };
+      novadis_barris: {
+        Row: NovadisBarril;
+        Insert: {
+          id?: string;
+          quantidade: number;
+          criado_por_id?: string | null;
+          criado_por_nome: string;
+          created_at?: string;
+        };
+        Update: Partial<NovadisBarril>;
+        Relationships: [];
+      };
       registos_faturacao_auditoria: {
         Row: AuditoriaRegisto;
         Insert: {
@@ -528,6 +572,26 @@ export type Database = {
       app_registar_pagamento_agente: {
         Args: { p_token: string; p_valor: number };
         Returns: PagamentoAgente[];
+      };
+      app_obter_novadis_config: {
+        Args: { p_token: string };
+        Returns: NovadisConfig[];
+      };
+      app_guardar_novadis_config: {
+        Args: {
+          p_token: string;
+          p_valor_barril?: number;
+          p_valor_tara?: number;
+        };
+        Returns: NovadisConfig[];
+      };
+      app_listar_novadis_barris: {
+        Args: { p_token: string };
+        Returns: NovadisBarril[];
+      };
+      app_registar_novadis_barris: {
+        Args: { p_token: string; p_quantidade: number };
+        Returns: NovadisBarril[];
       };
       app_login: {
         Args: { p_username: string; p_password: string };

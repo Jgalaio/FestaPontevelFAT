@@ -1,7 +1,7 @@
 # Faturação Pontevel
 
 Sistema web para registo diário da faturação da Festa de Pontével por posto.
-Inclui overview global, registo por posto, gestão, Pag.Agente e relatório diário pronto para impressão.
+Inclui overview global, registo por posto, gestão, Pag.Agente, Novadis e relatório diário pronto para impressão.
 
 ## Stack
 
@@ -24,7 +24,7 @@ Sem variáveis Supabase, a app abre em modo de demonstração e guarda dados no 
 
 1. Criar um projeto no Supabase.
 2. Abrir `SQL Editor`.
-3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql`, `supabase/add-pag-agente.sql` e `supabase/admin-delete-guard.sql`.
+3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql`, `supabase/add-pag-agente.sql`, `supabase/admin-delete-guard.sql` e `supabase/add-novadis.sql`.
 4. Copiar `Project URL` e a `publishable key`.
 
 Depois preencher:
@@ -50,6 +50,7 @@ supabase/auto-numero-despesas.sql
 supabase/add-imagem-fatura-despesas.sql
 supabase/add-pag-agente.sql
 supabase/admin-delete-guard.sql
+supabase/add-novadis.sql
 ```
 
 Essa atualização cria:
@@ -62,6 +63,7 @@ Essa atualização cria:
 - imagem opcional da fatura em `despesas_posto`
 - `agente_config` e `pagamentos_agente`, com valor necessário, valores-base e entregas ao agente
 - proteção para apagar faturação/despesas apenas com papel `admin`
+- `novadis_config` e `novadis_barris`, com valor por barril, tara e histórico de barris recebidos
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
 - funções RPC para login, faturação, despesas, pagamentos, dias, postos e gestão de utilizadores
@@ -100,10 +102,14 @@ git push -u origin main
 - `despesas_posto`: posto, data, tipo, número automático, valor, FAT com NIF, tipo de pagamento, estado/número/imagem da fatura
 - `agente_config`: valor necessário ao agente, Eventos Anual, Patrocínios e Peditório para o Pag.Agente
 - `pagamentos_agente`: entregas ao agente com valor, data/hora e utilizador
+- `novadis_config`: valor por barril e valor de tara, editáveis apenas por `admin`
+- `novadis_barris`: barris de imperial recebidos, quantidade, data/hora e utilizador
 - `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia
 
 Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor desse dia. Quando um dia é fechado, a base de dados bloqueia novas alterações de faturação e despesas para essa data.
+
+Os valores da Novadis são apresentados numa aba própria e não entram nos totais da festa.
 
 ## Próximos passos recomendados
 

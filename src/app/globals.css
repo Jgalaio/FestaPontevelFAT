@@ -141,7 +141,7 @@ button:disabled {
 
 .app-nav {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   padding: 5px;
   margin-bottom: 16px;
@@ -349,6 +349,11 @@ td span,
   background: var(--red-soft);
 }
 
+.alert.info {
+  color: var(--teal-dark);
+  background: var(--green-soft);
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.85fr);
@@ -492,6 +497,8 @@ td span,
 
 .auth-form,
 .agent-payment-form,
+.novadis-barril-form,
+.novadis-config-form,
 .dia-form,
 .agente-form,
 .posto-form,
@@ -503,6 +510,16 @@ td span,
 
 .agent-payment-form {
   grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+}
+
+.novadis-barril-form {
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+}
+
+.novadis-config-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
   align-items: end;
 }
 
@@ -1010,6 +1027,8 @@ td {
   .posto-form,
   .agente-form,
   .agent-payment-form,
+  .novadis-barril-form,
+  .novadis-config-form,
   .dia-form,
   .tipo-form,
   .user-form {
