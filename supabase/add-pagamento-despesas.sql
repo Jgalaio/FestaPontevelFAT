@@ -4,6 +4,9 @@ add column if not exists fat_com_nif boolean not null default false;
 alter table public.despesas_posto
 add column if not exists tipo_pagamento text not null default 'dinheiro';
 
+alter table public.despesas_posto
+add column if not exists fatura_imagem text;
+
 do $$
 begin
   if not exists (
@@ -37,6 +40,7 @@ returns table (
   tipo_pagamento text,
   fatura_paga boolean,
   numero_fatura text,
+  fatura_imagem text,
   observacoes text,
   criado_por_id uuid,
   criado_por_nome text,
@@ -68,6 +72,7 @@ begin
     d.tipo_pagamento,
     d.fatura_paga,
     d.numero_fatura,
+    d.fatura_imagem,
     d.observacoes,
     d.criado_por_id,
     d.criado_por_nome,
@@ -86,6 +91,7 @@ $$;
 
 drop function if exists public.app_guardar_despesa(text, uuid, uuid, date, text, text, numeric, boolean, text, text);
 drop function if exists public.app_guardar_despesa(text, uuid, uuid, date, text, text, numeric, boolean, text, boolean, text, text);
+drop function if exists public.app_guardar_despesa(text, uuid, uuid, date, text, text, numeric, boolean, text, boolean, text, text, text);
 
 create or replace function public.app_guardar_despesa(
   p_token text,
@@ -99,6 +105,7 @@ create or replace function public.app_guardar_despesa(
   p_tipo_pagamento text default 'dinheiro',
   p_fatura_paga boolean default false,
   p_numero_fatura text default null,
+  p_fatura_imagem text default null,
   p_observacoes text default null
 )
 returns uuid
@@ -115,6 +122,7 @@ declare
   normalized_tipo text := trim(coalesce(p_tipo_despesa, ''));
   normalized_numero text := trim(coalesce(p_numero_despesa, ''));
   normalized_numero_fatura text := nullif(trim(coalesce(p_numero_fatura, '')), '');
+  normalized_fatura_imagem text := nullif(trim(coalesce(p_fatura_imagem, '')), '');
   normalized_tipo_pagamento text := case when p_tipo_pagamento = 'transferencia' then 'transferencia' else 'dinheiro' end;
   resolved_numero text;
   next_numero integer;
@@ -162,6 +170,7 @@ begin
         tipo_pagamento = normalized_tipo_pagamento,
         fatura_paga = coalesce(p_fatura_paga, false),
         numero_fatura = normalized_numero_fatura,
+        fatura_imagem = normalized_fatura_imagem,
         observacoes = nullif(trim(coalesce(p_observacoes, '')), ''),
         atualizado_por_id = actor.utilizador_id,
         atualizado_por_nome = actor.nome,
@@ -215,6 +224,7 @@ begin
     tipo_pagamento,
     fatura_paga,
     numero_fatura,
+    fatura_imagem,
     observacoes,
     criado_por_id,
     criado_por_nome,
@@ -231,6 +241,7 @@ begin
     normalized_tipo_pagamento,
     coalesce(p_fatura_paga, false),
     normalized_numero_fatura,
+    normalized_fatura_imagem,
     nullif(trim(coalesce(p_observacoes, '')), ''),
     actor.utilizador_id,
     actor.nome,

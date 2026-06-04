@@ -75,6 +75,7 @@ export type DespesaRow = {
   tipo_pagamento: "dinheiro" | "transferencia";
   fatura_paga: boolean;
   numero_fatura: string | null;
+  fatura_imagem: string | null;
   observacoes: string | null;
   criado_por_id: string | null;
   criado_por_nome: string | null;
@@ -132,6 +133,7 @@ export type DespesaForm = {
   tipoPagamento: "dinheiro" | "transferencia";
   faturaPaga: boolean;
   numeroFatura: string;
+  faturaImagem: string;
   observacoes: string;
 };
 
@@ -286,6 +288,7 @@ export type Database = {
           tipo_pagamento?: "dinheiro" | "transferencia";
           fatura_paga?: boolean;
           numero_fatura?: string | null;
+          fatura_imagem?: string | null;
           observacoes?: string | null;
           criado_por_id?: string | null;
           criado_por_nome?: string | null;
@@ -372,6 +375,7 @@ export type Database = {
           p_tipo_pagamento?: "dinheiro" | "transferencia";
           p_fatura_paga?: boolean;
           p_numero_fatura?: string | null;
+          p_fatura_imagem?: string | null;
           p_observacoes?: string | null;
         };
         Returns: string;

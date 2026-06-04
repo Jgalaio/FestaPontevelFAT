@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import {
   Building2,
   CalendarDays,
@@ -90,6 +90,8 @@ const STORAGE_KEY = "pontevel-faturacao-mvp";
 const DEMO_OPERATOR_KEY = "pontevel-faturacao-operador";
 const APP_SESSION_KEY = "pontevel-faturacao-sessao";
 const DELETE_DAY_PASSWORD = "21051986Gz!";
+const MAX_INVOICE_IMAGE_BYTES = 8 * 1024 * 1024;
+const INVOICE_IMAGE_MAX_SIDE = 1400;
 
 const EXPENSE_TYPES = [
   "Produtos",
@@ -164,6 +166,55 @@ function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Não foi possível ler a imagem da fatura."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Não foi possível preparar a imagem da fatura."));
+    image.src = dataUrl;
+  });
+}
+
+async function prepareInvoiceImage(file: File) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Escolhe um ficheiro de imagem para a fatura.");
+  }
+
+  if (file.size > MAX_INVOICE_IMAGE_BYTES) {
+    throw new Error("A imagem da fatura deve ter no máximo 8 MB.");
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await loadImage(dataUrl);
+  const maxSide = Math.max(image.naturalWidth, image.naturalHeight);
+  const scale = maxSide > INVOICE_IMAGE_MAX_SIDE ? INVOICE_IMAGE_MAX_SIDE / maxSide : 1;
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return dataUrl;
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+  context.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL("image/jpeg", 0.78);
+}
+
 function emptyForm(date = todayISO()): RegistoForm {
   return {
     postoId: "",
@@ -187,6 +238,7 @@ function emptyDespesaForm(date = todayISO()): DespesaForm {
     tipoPagamento: "dinheiro",
     faturaPaga: false,
     numeroFatura: "",
+    faturaImagem: "",
     observacoes: ""
   };
 }
@@ -235,11 +287,13 @@ function formatTipoPagamento(value: string | null | undefined) {
 }
 
 function normalizeDespesaRow(despesa: DespesaRow): DespesaRow {
-  const rawDespesa = despesa as DespesaRow & Partial<Pick<DespesaRow, "fat_com_nif" | "tipo_pagamento">>;
+  const rawDespesa = despesa as DespesaRow &
+    Partial<Pick<DespesaRow, "fat_com_nif" | "fatura_imagem" | "tipo_pagamento">>;
 
   return {
     ...despesa,
     fat_com_nif: Boolean(rawDespesa.fat_com_nif),
+    fatura_imagem: rawDespesa.fatura_imagem ?? null,
     tipo_pagamento: normalizeTipoPagamento(rawDespesa.tipo_pagamento)
   };
 }
@@ -1633,6 +1687,27 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function handleDespesaImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const imageDataUrl = await prepareInvoiceImage(file);
+      setDespesaForm((current) => ({ ...current, faturaImagem: imageDataUrl }));
+    } catch (imageError) {
+      setError(imageError instanceof Error ? imageError.message : "Não foi possível carregar a imagem da fatura.");
+    } finally {
+      input.value = "";
+    }
+  }
+
   async function handleSaveDespesa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setExpenseSaving(true);
@@ -1688,6 +1763,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       tipo_pagamento: despesaForm.tipoPagamento,
       fatura_paga: despesaForm.faturaPaga,
       numero_fatura: despesaForm.numeroFatura.trim() || null,
+      fatura_imagem: despesaForm.faturaImagem || null,
       observacoes: despesaForm.observacoes.trim() || null
     };
 
@@ -1741,6 +1817,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       p_tipo_pagamento: payload.tipo_pagamento,
       p_fatura_paga: payload.fatura_paga,
       p_numero_fatura: payload.numero_fatura,
+      p_fatura_imagem: payload.fatura_imagem,
       p_observacoes: payload.observacoes
     });
 
@@ -1818,6 +1895,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       tipoPagamento: normalizeTipoPagamento(despesa.tipo_pagamento),
       faturaPaga: despesa.fatura_paga,
       numeroFatura: despesa.numero_fatura ?? "",
+      faturaImagem: despesa.fatura_imagem ?? "",
       observacoes: despesa.observacoes ?? ""
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2384,6 +2462,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                           <th>FAT c/ NIF</th>
                           <th>Pagamento</th>
                           <th>Fatura</th>
+                          <th>Imagem</th>
                           <th>Alterado por</th>
                           <th>Observações</th>
                         </tr>
@@ -2405,6 +2484,23 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                             <td className="audit-cell">
                               <strong>{despesa.fatura_paga ? "Paga" : "Por pagar"}</strong>
                               <span>{despesa.numero_fatura ?? ""}</span>
+                            </td>
+                            <td>
+                              {despesa.fatura_imagem ? (
+                                <a
+                                  className="invoice-link"
+                                  href={despesa.fatura_imagem}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <img
+                                    className="invoice-thumb"
+                                    src={despesa.fatura_imagem}
+                                    alt={`Fatura ${despesa.numero_fatura ?? despesa.numero_despesa}`}
+                                  />
+                                  <span>Ver</span>
+                                </a>
+                              ) : null}
                             </td>
                             <td className="audit-cell">
                               <strong>{despesa.atualizado_por_nome ?? despesa.criado_por_nome ?? "Sem utilizador"}</strong>
@@ -2656,6 +2752,28 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   required={despesaForm.faturaPaga}
                 />
               </label>
+
+              <label className="wide-field">
+                Imagem da fatura
+                <input type="file" accept="image/*" onChange={(event) => void handleDespesaImageChange(event)} />
+              </label>
+
+              {despesaForm.faturaImagem ? (
+                <div className="invoice-preview wide-field">
+                  <a href={despesaForm.faturaImagem} target="_blank" rel="noreferrer">
+                    <img src={despesaForm.faturaImagem} alt="Imagem da fatura" />
+                    <span>Ver imagem anexada</span>
+                  </a>
+                  <button
+                    className="icon-text-button"
+                    type="button"
+                    onClick={() => setDespesaForm((current) => ({ ...current, faturaImagem: "" }))}
+                  >
+                    <X size={18} aria-hidden="true" />
+                    Remover imagem
+                  </button>
+                </div>
+              ) : null}
 
               <label className="wide-field">
                 Observações
@@ -3208,6 +3326,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   <th>FAT c/ NIF</th>
                   <th>Pagamento</th>
                   <th>Fatura</th>
+                  <th>Imagem</th>
                   <th>Alterado por</th>
                   <th>Observações</th>
                   <th aria-label="Ações" />
@@ -3230,6 +3349,18 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     <td className="audit-cell">
                       <strong>{despesa.fatura_paga ? "Paga" : "Por pagar"}</strong>
                       <span>{despesa.numero_fatura ?? ""}</span>
+                    </td>
+                    <td>
+                      {despesa.fatura_imagem ? (
+                        <a className="invoice-link" href={despesa.fatura_imagem} target="_blank" rel="noreferrer">
+                          <img
+                            className="invoice-thumb"
+                            src={despesa.fatura_imagem}
+                            alt={`Fatura ${despesa.numero_fatura ?? despesa.numero_despesa}`}
+                          />
+                          <span>Ver</span>
+                        </a>
+                      ) : null}
                     </td>
                     <td className="audit-cell">
                       <strong>{despesa.atualizado_por_nome ?? despesa.criado_por_nome ?? "Sem utilizador"}</strong>

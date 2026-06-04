@@ -447,6 +447,43 @@ input:disabled {
   background: rgba(232, 239, 255, 0.72);
 }
 
+.invoice-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(232, 239, 255, 0.58);
+}
+
+.invoice-preview a,
+.invoice-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--teal-dark);
+  font-weight: 850;
+}
+
+.invoice-preview img {
+  width: 74px;
+  height: 74px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.invoice-thumb {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  object-fit: cover;
+}
+
 .wide-field {
   grid-column: 1 / -1;
 }
@@ -612,7 +649,7 @@ table {
 }
 
 .expenses-table {
-  min-width: 1260px;
+  min-width: 1360px;
 }
 
 .overview-table {
@@ -620,7 +657,7 @@ table {
 }
 
 .report-table {
-  min-width: 900px;
+  min-width: 1000px;
 }
 
 th,
@@ -884,6 +921,7 @@ td {
     text-align: left;
   }
 
+  .invoice-preview,
   .form-actions,
   .user-form-actions,
   .report-actions {
@@ -992,6 +1030,11 @@ td {
 
   .table-wrap {
     overflow: visible;
+  }
+
+  .invoice-thumb {
+    width: 28px;
+    height: 28px;
   }
 
   table,

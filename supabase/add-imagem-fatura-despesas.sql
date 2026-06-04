@@ -1,6 +1,69 @@
 alter table public.despesas_posto
 add column if not exists fatura_imagem text;
 
+drop function if exists public.app_listar_despesas(text, date);
+
+create or replace function public.app_listar_despesas(p_token text, p_data date)
+returns table (
+  id uuid,
+  posto_id uuid,
+  data date,
+  tipo_despesa text,
+  numero_despesa text,
+  valor numeric,
+  fat_com_nif boolean,
+  tipo_pagamento text,
+  fatura_paga boolean,
+  numero_fatura text,
+  fatura_imagem text,
+  observacoes text,
+  criado_por_id uuid,
+  criado_por_nome text,
+  atualizado_por_id uuid,
+  atualizado_por_nome text,
+  created_at timestamptz,
+  updated_at timestamptz,
+  posto_nome text,
+  posto_responsavel text
+)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  actor record;
+begin
+  select * into actor from public.app_require_actor(p_token) limit 1;
+
+  return query
+  select
+    d.id,
+    d.posto_id,
+    d.data,
+    d.tipo_despesa,
+    d.numero_despesa,
+    d.valor,
+    d.fat_com_nif,
+    d.tipo_pagamento,
+    d.fatura_paga,
+    d.numero_fatura,
+    d.fatura_imagem,
+    d.observacoes,
+    d.criado_por_id,
+    d.criado_por_nome,
+    d.atualizado_por_id,
+    d.atualizado_por_nome,
+    d.created_at,
+    d.updated_at,
+    p.nome as posto_nome,
+    p.responsavel as posto_responsavel
+  from public.despesas_posto d
+  left join public.postos p on p.id = d.posto_id
+  where d.data = p_data
+  order by p.nome asc, d.created_at asc;
+end;
+$$;
+
 drop function if exists public.app_guardar_despesa(text, uuid, uuid, date, text, text, numeric, boolean, text, text);
 drop function if exists public.app_guardar_despesa(text, uuid, uuid, date, text, text, numeric, boolean, text, boolean, text, text);
 drop function if exists public.app_guardar_despesa(text, uuid, uuid, date, text, text, numeric, boolean, text, boolean, text, text, text);
