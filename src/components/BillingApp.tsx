@@ -51,6 +51,7 @@ type DemoStore = {
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "dias" | "postos" | "tipos" | "utilizadores";
 type BillingAppMode = "overview" | "register" | "management";
+type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
 type BillingAppProps = {
   mode?: BillingAppMode;
@@ -180,6 +181,8 @@ function emptyDespesaForm(date = todayISO()): DespesaForm {
     tipoDespesa: EXPENSE_TYPES[0],
     numeroDespesa: "",
     valor: "",
+    fatComNif: false,
+    tipoPagamento: "dinheiro",
     faturaPaga: false,
     numeroFatura: "",
     observacoes: ""
@@ -218,6 +221,24 @@ function emptyDiaForm(date = todayISO()): DiaForm {
   return {
     data: date,
     nome: ""
+  };
+}
+
+function normalizeTipoPagamento(value: string | null | undefined): TipoPagamentoDespesa {
+  return value === "transferencia" ? "transferencia" : "dinheiro";
+}
+
+function formatTipoPagamento(value: string | null | undefined) {
+  return normalizeTipoPagamento(value) === "transferencia" ? "Transferência" : "Dinheiro";
+}
+
+function normalizeDespesaRow(despesa: DespesaRow): DespesaRow {
+  const rawDespesa = despesa as DespesaRow & Partial<Pick<DespesaRow, "fat_com_nif" | "tipo_pagamento">>;
+
+  return {
+    ...despesa,
+    fat_com_nif: Boolean(rawDespesa.fat_com_nif),
+    tipo_pagamento: normalizeTipoPagamento(rawDespesa.tipo_pagamento)
   };
 }
 
@@ -286,7 +307,7 @@ function readDemoStore(): DemoStore {
   try {
     const parsed = JSON.parse(raw) as Partial<DemoStore>;
     const registos = parsed.registos ?? [];
-    const despesas = parsed.despesas ?? [];
+    const despesas = (parsed.despesas ?? []).map(normalizeDespesaRow);
     const diasFesta = parsed.diasFesta?.length ? sortDiasFesta(parsed.diasFesta) : buildDemoDias(registos, despesas);
 
     return {
@@ -365,10 +386,14 @@ function attachPostos(registos: RegistoRow[], postos: Posto[]): Registo[] {
 
 function attachPostosToDespesas(despesas: DespesaRow[], postos: Posto[]): Despesa[] {
   return despesas
-    .map((despesa) => ({
-      ...despesa,
-      postos: postos.find((posto) => posto.id === despesa.posto_id) ?? null
-    }))
+    .map((despesa) => {
+      const normalizedDespesa = normalizeDespesaRow(despesa);
+
+      return {
+        ...normalizedDespesa,
+        postos: postos.find((posto) => posto.id === normalizedDespesa.posto_id) ?? null
+      };
+    })
     .sort((a, b) => {
       const byPosto = (a.postos?.nome ?? "").localeCompare(b.postos?.nome ?? "");
       return byPosto || a.created_at.localeCompare(b.created_at);
@@ -390,9 +415,10 @@ function mapRegistoRpc(row: RegistoRpc): Registo {
 
 function mapDespesaRpc(row: DespesaRpc): Despesa {
   const { posto_nome: postoNome, posto_responsavel: postoResponsavel, ...despesa } = row;
+  const normalizedDespesa = normalizeDespesaRow(despesa);
 
   return {
-    ...despesa,
+    ...normalizedDespesa,
     postos: {
       id: row.posto_id,
       nome: postoNome ?? "Posto removido",
@@ -553,6 +579,21 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
   const dailyDespesasTotal = useMemo(() => {
     return despesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
+  }, [despesas]);
+
+  const dailyExpensePaymentTotals = useMemo(() => {
+    return despesas.reduce(
+      (acc, despesa) => {
+        if (normalizeTipoPagamento(despesa.tipo_pagamento) === "transferencia") {
+          acc.transferencia += Number(despesa.valor);
+        } else {
+          acc.dinheiro += Number(despesa.valor);
+        }
+
+        return acc;
+      },
+      { dinheiro: 0, transferencia: 0 }
+    );
   }, [despesas]);
 
   const postosRegistados = useMemo(
@@ -1470,6 +1511,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       tipo_despesa: despesaForm.tipoDespesa.trim(),
       numero_despesa: despesaForm.numeroDespesa.trim(),
       valor,
+      fat_com_nif: despesaForm.fatComNif,
+      tipo_pagamento: despesaForm.tipoPagamento,
       fatura_paga: despesaForm.faturaPaga,
       numero_fatura: despesaForm.faturaPaga ? despesaForm.numeroFatura.trim() || null : null,
       observacoes: despesaForm.observacoes.trim() || null
@@ -1519,6 +1562,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       p_tipo_despesa: payload.tipo_despesa,
       p_numero_despesa: payload.numero_despesa,
       p_valor: payload.valor,
+      p_fat_com_nif: payload.fat_com_nif,
+      p_tipo_pagamento: payload.tipo_pagamento,
       p_fatura_paga: payload.fatura_paga,
       p_numero_fatura: payload.numero_fatura,
       p_observacoes: payload.observacoes
@@ -1594,6 +1639,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       tipoDespesa: despesa.tipo_despesa,
       numeroDespesa: despesa.numero_despesa,
       valor: String(Number(despesa.valor).toFixed(2)),
+      fatComNif: Boolean(despesa.fat_com_nif),
+      tipoPagamento: normalizeTipoPagamento(despesa.tipo_pagamento),
       faturaPaga: despesa.fatura_paga,
       numeroFatura: despesa.numero_fatura ?? "",
       observacoes: despesa.observacoes ?? ""
@@ -1795,6 +1842,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <article className="metric">
             <span>Despesas</span>
             <strong>{formatCurrency(dailyDespesasTotal)}</strong>
+          </article>
+          <article className="metric">
+            <span>Pago dinheiro</span>
+            <strong>{formatCurrency(dailyExpensePaymentTotals.dinheiro)}</strong>
+          </article>
+          <article className="metric">
+            <span>Pago transf.</span>
+            <strong>{formatCurrency(dailyExpensePaymentTotals.transferencia)}</strong>
           </article>
           <article className="metric">
             <span>Saldo</span>
@@ -2125,6 +2180,35 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   value={despesaForm.valor}
                   onChange={(event) => setDespesaForm((current) => ({ ...current, valor: event.target.value }))}
                 />
+              </label>
+
+              <label>
+                FAT c/ NIF
+                <select
+                  value={despesaForm.fatComNif ? "sim" : "nao"}
+                  onChange={(event) =>
+                    setDespesaForm((current) => ({ ...current, fatComNif: event.target.value === "sim" }))
+                  }
+                >
+                  <option value="nao">Não</option>
+                  <option value="sim">Sim</option>
+                </select>
+              </label>
+
+              <label>
+                Tipo de pagamento
+                <select
+                  value={despesaForm.tipoPagamento}
+                  onChange={(event) =>
+                    setDespesaForm((current) => ({
+                      ...current,
+                      tipoPagamento: normalizeTipoPagamento(event.target.value)
+                    }))
+                  }
+                >
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="transferencia">Transferência</option>
+                </select>
               </label>
 
               <label className="checkbox-row">
@@ -2703,6 +2787,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   <th>Tipo</th>
                   <th>Nº despesa</th>
                   <th>Valor</th>
+                  <th>FAT c/ NIF</th>
+                  <th>Pagamento</th>
                   <th>Fatura</th>
                   <th>Alterado por</th>
                   <th>Observações</th>
@@ -2721,6 +2807,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     <td>
                       <strong>{formatCurrency(Number(despesa.valor))}</strong>
                     </td>
+                    <td>{despesa.fat_com_nif ? "Sim" : "Não"}</td>
+                    <td>{formatTipoPagamento(despesa.tipo_pagamento)}</td>
                     <td className="audit-cell">
                       <strong>{despesa.fatura_paga ? "Paga" : "Por pagar"}</strong>
                       <span>{despesa.numero_fatura ?? ""}</span>
