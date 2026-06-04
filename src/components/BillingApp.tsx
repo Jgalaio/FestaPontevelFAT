@@ -633,6 +633,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [agenteConfigSaving, setAgenteConfigSaving] = useState(false);
   const [pagamentoAgenteSaving, setPagamentoAgenteSaving] = useState(false);
   const [overviewOnlyFestaTotal, setOverviewOnlyFestaTotal] = useState(false);
+  const [overviewOnlyFestaSaldo, setOverviewOnlyFestaSaldo] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -903,6 +904,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const overviewTotalComExtras = dailyTotals.total + agenteValoresBase;
   const overviewTotalApresentado = overviewOnlyFestaTotal ? dailyTotals.total : overviewTotalComExtras;
   const overviewSaldoReal = overviewTotalComExtras - dailyDespesasTotal - agenteTotalEntregue;
+  const overviewSaldoApresentado = overviewOnlyFestaSaldo ? dailySaldo : overviewSaldoReal;
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -2399,11 +2401,21 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <span>Despesas</span>
             <strong>{formatCurrency(dailyDespesasTotal)}</strong>
           </article>
-          <article className="metric metric-total">
+          <button
+            className="metric metric-total metric-button"
+            type="button"
+            onClick={() => setOverviewOnlyFestaSaldo((current) => !current)}
+            aria-pressed={overviewOnlyFestaSaldo}
+            title="Alternar saldo real"
+          >
             <span>Saldo real</span>
-            <strong>{formatCurrency(overviewSaldoReal)}</strong>
-            <small>Depois de pagar agente: {formatCurrency(agenteTotalEntregue)}</small>
-          </article>
+            <strong>{formatCurrency(overviewSaldoApresentado)}</strong>
+            <small>
+              {overviewOnlyFestaSaldo
+                ? "Só faturação menos despesas"
+                : `Depois de pagar agente: ${formatCurrency(agenteTotalEntregue)}`}
+            </small>
+          </button>
           <article className="metric">
             <span>Pago dinheiro</span>
             <strong>{formatCurrency(dailyExpensePaymentTotals.dinheiro)}</strong>
