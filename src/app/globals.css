@@ -219,6 +219,17 @@ button:disabled {
   gap: 12px;
   padding: 18px;
   overflow: hidden;
+  text-align: left;
+}
+
+.metric-button {
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.metric-button:focus-visible {
+  outline: 3px solid rgba(31, 101, 242, 0.28);
+  outline-offset: 3px;
 }
 
 .metric span,

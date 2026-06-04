@@ -632,6 +632,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [tipoDespesaSaving, setTipoDespesaSaving] = useState(false);
   const [agenteConfigSaving, setAgenteConfigSaving] = useState(false);
   const [pagamentoAgenteSaving, setPagamentoAgenteSaving] = useState(false);
+  const [overviewOnlyFestaTotal, setOverviewOnlyFestaTotal] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -898,6 +899,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const agenteTotalEntregue = pagamentosAgente.reduce((acc, pagamento) => acc + Number(pagamento.valor), 0);
   const agenteFaltaPagar = Math.max(agenteValorNecessario - agenteTotalEntregue, 0);
   const agentePagoAMais = Math.max(agenteTotalEntregue - agenteValorNecessario, 0);
+  const saldoAcumuladoReal = agenteTotalCalculado - agenteTotalEntregue;
+  const overviewTotalComExtras = dailyTotals.total + agenteValoresBase;
+  const overviewTotalApresentado = overviewOnlyFestaTotal ? dailyTotals.total : overviewTotalComExtras;
+  const overviewSaldoReal = overviewTotalComExtras - dailyDespesasTotal - agenteTotalEntregue;
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -1182,10 +1187,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }, [isLoggedIn, loadData]);
 
   useEffect(() => {
-    if (isLoggedIn && (isAgentMode || isManagementMode)) {
+    if (isLoggedIn && (isAgentMode || isManagementMode || isOverviewMode)) {
       void loadAgentData();
     }
-  }, [isAgentMode, isLoggedIn, isManagementMode, loadAgentData]);
+  }, [isAgentMode, isLoggedIn, isManagementMode, isOverviewMode, loadAgentData]);
 
   useEffect(() => {
     setForm((current) => ({ ...current, data: selectedDate }));
@@ -2375,18 +2380,29 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
       {isOverviewMode ? (
         <section className="summary-grid" aria-label="Totais da festa">
-          <article className="metric metric-total">
+          <button
+            className="metric metric-total metric-button"
+            type="button"
+            onClick={() => setOverviewOnlyFestaTotal((current) => !current)}
+            aria-pressed={overviewOnlyFestaTotal}
+            title="Alternar total da festa"
+          >
             <span>Total da festa</span>
-            <strong>{formatCurrency(dailyTotals.total)}</strong>
-            <small>{orderedDiasFesta.length} dias criados</small>
-          </article>
+            <strong>{formatCurrency(overviewTotalApresentado)}</strong>
+            <small>
+              {overviewOnlyFestaTotal
+                ? "Só faturação registada"
+                : `Inclui ${formatCurrency(agenteValoresBase)} em valores extra`}
+            </small>
+          </button>
           <article className="metric metric-total">
             <span>Despesas</span>
             <strong>{formatCurrency(dailyDespesasTotal)}</strong>
           </article>
           <article className="metric metric-total">
-            <span>Saldo</span>
-            <strong>{formatCurrency(dailySaldo)}</strong>
+            <span>Saldo real</span>
+            <strong>{formatCurrency(overviewSaldoReal)}</strong>
+            <small>Depois de pagar agente: {formatCurrency(agenteTotalEntregue)}</small>
           </article>
           <article className="metric">
             <span>Pago dinheiro</span>
@@ -2395,6 +2411,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <article className="metric">
             <span>Pago transf.</span>
             <strong>{formatCurrency(dailyExpensePaymentTotals.transferencia)}</strong>
+          </article>
+          <article className="metric">
+            <span>Pago agente</span>
+            <strong>{formatCurrency(agenteTotalEntregue)}</strong>
           </article>
           <article className="metric">
             <span>Dinheiro</span>
@@ -2829,13 +2849,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <strong>{formatCurrency(Number(agenteConfig.valor_peditorio))}</strong>
             </article>
             <article className="metric">
-              <span>Saldo da festa</span>
-              <strong>{formatCurrency(dailySaldo)}</strong>
+              <span>Saldo acumulado</span>
+              <strong>{formatCurrency(saldoAcumuladoReal)}</strong>
+              <small>Depois de pagar agente</small>
             </article>
             <article className="metric">
-              <span>Total calculado</span>
+              <span>Total acumulado</span>
               <strong>{formatCurrency(agenteTotalCalculado)}</strong>
-              <small>Valores base + saldo da festa</small>
+              <small>Antes das entregas ao agente</small>
             </article>
           </section>
 
