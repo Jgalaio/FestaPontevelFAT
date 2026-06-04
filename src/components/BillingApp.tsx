@@ -293,6 +293,29 @@ function formatDiaLabel(dia: DiaFesta | null) {
   return `${dia.nome} · ${formatDateLabel(dia.data)}`;
 }
 
+function formatDespesaNumber(sequence: number) {
+  return `D-${String(sequence).padStart(3, "0")}`;
+}
+
+function getDespesaSequence(numeroDespesa: string) {
+  const match = numeroDespesa.match(/^D-(\d+)$/i);
+
+  return match ? Number(match[1]) : null;
+}
+
+function getNextDespesaNumber(despesas: Pick<DespesaRow, "data" | "numero_despesa" | "posto_id">[], postoId: string, data: string) {
+  const maxSequence = despesas.reduce((max, despesa) => {
+    if (despesa.posto_id !== postoId || despesa.data !== data) {
+      return max;
+    }
+
+    const sequence = getDespesaSequence(despesa.numero_despesa);
+    return sequence && sequence > max ? sequence : max;
+  }, 0);
+
+  return formatDespesaNumber(maxSequence + 1);
+}
+
 function readDemoStore(): DemoStore {
   if (typeof window === "undefined") {
     return { diasFesta: baseDiasFesta, postos: basePostos, registos: [], despesas: [], tiposDespesa: baseTiposDespesa };
@@ -499,6 +522,18 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     () => (selectedPosto ? despesas.filter((despesa) => despesa.posto_id === selectedPosto.id) : []),
     [despesas, selectedPosto]
   );
+
+  const nextDespesaNumber = useMemo(() => {
+    if (despesaForm.id) {
+      return despesaForm.numeroDespesa || "Sem número";
+    }
+
+    if (!despesaForm.postoId || !selectedDia) {
+      return "Automático";
+    }
+
+    return getNextDespesaNumber(despesas, despesaForm.postoId, selectedDia.data);
+  }, [despesaForm.id, despesaForm.numeroDespesa, despesaForm.postoId, despesas, selectedDia]);
 
   const postoFinancials = useMemo(() => {
     const next = new Map<
@@ -1580,12 +1615,6 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    if (!despesaForm.numeroDespesa.trim()) {
-      setExpenseSaving(false);
-      setError("Indica o número da despesa.");
-      return;
-    }
-
     if (despesaForm.faturaPaga && !despesaForm.numeroFatura.trim()) {
       setExpenseSaving(false);
       setError("Indica o número da fatura paga.");
@@ -1605,12 +1634,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       posto_id: despesaForm.postoId,
       data: selectedDia.data,
       tipo_despesa: despesaForm.tipoDespesa.trim(),
-      numero_despesa: despesaForm.numeroDespesa.trim(),
+      numero_despesa: despesaForm.id ? despesaForm.numeroDespesa.trim() : "",
       valor,
       fat_com_nif: despesaForm.fatComNif,
       tipo_pagamento: despesaForm.tipoPagamento,
       fatura_paga: despesaForm.faturaPaga,
-      numero_fatura: despesaForm.faturaPaga ? despesaForm.numeroFatura.trim() || null : null,
+      numero_fatura: despesaForm.numeroFatura.trim() || null,
       observacoes: despesaForm.observacoes.trim() || null
     };
 
@@ -1623,6 +1652,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       const now = new Date().toISOString();
       const nextDespesa: DespesaRow = {
         ...payload,
+        numero_despesa:
+          existingDespesa?.numero_despesa ?? getNextDespesaNumber(store.despesas, payload.posto_id, payload.data),
         id: existingDespesa?.id ?? makeId("despesa"),
         created_at: existingDespesa?.created_at ?? now,
         updated_at: now,
@@ -2265,14 +2296,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
               <label>
                 Nº despesa
-                <input
-                  value={despesaForm.numeroDespesa}
-                  onChange={(event) =>
-                    setDespesaForm((current) => ({ ...current, numeroDespesa: event.target.value }))
-                  }
-                  placeholder="Ex.: D-001"
-                  required
-                />
+                <input value={nextDespesaNumber} readOnly disabled />
               </label>
 
               <label>
@@ -2323,8 +2347,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   onChange={(event) =>
                     setDespesaForm((current) => ({
                       ...current,
-                      faturaPaga: event.target.checked,
-                      numeroFatura: event.target.checked ? current.numeroFatura : ""
+                      faturaPaga: event.target.checked
                     }))
                   }
                 />
@@ -2339,7 +2362,6 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     setDespesaForm((current) => ({ ...current, numeroFatura: event.target.value }))
                   }
                   placeholder="Ex.: FT 2026/001"
-                  disabled={!despesaForm.faturaPaga}
                   required={despesaForm.faturaPaga}
                 />
               </label>
