@@ -499,6 +499,7 @@ td span,
 .agent-payment-form,
 .novadis-barril-form,
 .novadis-config-form,
+.novadis-consumo-form,
 .dia-form,
 .agente-form,
 .posto-form,
@@ -515,6 +516,11 @@ td span,
 
 .novadis-barril-form {
   grid-template-columns: minmax(180px, 0.75fr) minmax(180px, 1fr) auto;
+  align-items: end;
+}
+
+.novadis-consumo-form {
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.8fr) minmax(160px, 0.8fr) auto;
   align-items: end;
 }
 
@@ -1056,6 +1062,7 @@ td {
   .agent-payment-form,
   .novadis-barril-form,
   .novadis-config-form,
+  .novadis-consumo-form,
   .dia-form,
   .tipo-form,
   .user-form {

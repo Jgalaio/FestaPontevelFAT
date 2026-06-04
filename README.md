@@ -63,7 +63,7 @@ Essa atualização cria:
 - imagem opcional da fatura em `despesas_posto`
 - `agente_config` e `pagamentos_agente`, com valor necessário, valores-base e entregas ao agente
 - proteção para apagar faturação/despesas apenas com papel `admin`
-- `novadis_config` e `novadis_barris`, com valor unitário/tara por tipo e histórico de registos recebidos
+- `novadis_config`, `novadis_barris` e `novadis_consumos`, com valor unitário/tara por tipo, histórico recebido e gasto diário
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
 - funções RPC para login, faturação, despesas, pagamentos, dias, postos e gestão de utilizadores
@@ -104,12 +104,13 @@ git push -u origin main
 - `pagamentos_agente`: entregas ao agente com valor, data/hora e utilizador
 - `novadis_config`: valor unitário e valor de tara para Imperial, Cidra, Sangria e Garrafas de CO2, editáveis apenas por `admin`
 - `novadis_barris`: registos Novadis recebidos, tipo, quantidade, data/hora e utilizador
+- `novadis_consumos`: gastos Novadis por dia, tipo, quantidade, data/hora e utilizador
 - `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia
 
 Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor desse dia. Quando um dia é fechado, a base de dados bloqueia novas alterações de faturação e despesas para essa data.
 
-Os valores da Novadis são apresentados numa aba própria e não entram nos totais da festa.
+Os valores da Novadis são apresentados numa aba própria e não entram nos totais da festa. Na consignação, as unidades cheias a devolver contam pelo valor unitário e as unidades gastas/vazias contam pelo valor da tara.
 
 ## Próximos passos recomendados
 

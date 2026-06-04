@@ -136,6 +136,16 @@ export type NovadisBarril = {
   created_at: string;
 };
 
+export type NovadisConsumo = {
+  id: string;
+  data: string;
+  tipo: NovadisTipo;
+  quantidade: number;
+  criado_por_id: string | null;
+  criado_por_nome: string;
+  created_at: string;
+};
+
 export type AuditoriaRegisto = {
   id: string;
   registo_id: string | null;
@@ -415,6 +425,20 @@ export type Database = {
         Update: Partial<NovadisBarril>;
         Relationships: [];
       };
+      novadis_consumos: {
+        Row: NovadisConsumo;
+        Insert: {
+          id?: string;
+          data: string;
+          tipo?: NovadisTipo;
+          quantidade: number;
+          criado_por_id?: string | null;
+          criado_por_nome: string;
+          created_at?: string;
+        };
+        Update: Partial<NovadisConsumo>;
+        Relationships: [];
+      };
       registos_faturacao_auditoria: {
         Row: AuditoriaRegisto;
         Insert: {
@@ -614,6 +638,14 @@ export type Database = {
       app_registar_novadis_barris: {
         Args: { p_token: string; p_tipo: NovadisTipo; p_quantidade: number };
         Returns: NovadisBarril[];
+      };
+      app_listar_novadis_consumos: {
+        Args: { p_token: string };
+        Returns: NovadisConsumo[];
+      };
+      app_registar_novadis_consumo: {
+        Args: { p_token: string; p_data: string; p_tipo: NovadisTipo; p_quantidade: number };
+        Returns: NovadisConsumo[];
       };
       app_login: {
         Args: { p_username: string; p_password: string };

@@ -43,6 +43,7 @@ import type {
   RegistoRpc,
   NovadisBarril,
   NovadisConfig,
+  NovadisConsumo,
   NovadisTipo,
   PagamentoAgente,
   TipoDespesa,
@@ -59,6 +60,7 @@ type DemoStore = {
   pagamentosAgente: PagamentoAgente[];
   novadisConfig: NovadisConfig;
   novadisBarris: NovadisBarril[];
+  novadisConsumos: NovadisConsumo[];
 };
 
 type EntryTab = "faturacao" | "despesas";
@@ -120,6 +122,12 @@ type NovadisConfigForm = {
 };
 
 type NovadisBarrilForm = {
+  tipo: NovadisTipo;
+  quantidade: string;
+};
+
+type NovadisConsumoForm = {
+  data: string;
   tipo: NovadisTipo;
   quantidade: string;
 };
@@ -438,6 +446,14 @@ function emptyNovadisBarrilForm(): NovadisBarrilForm {
   };
 }
 
+function emptyNovadisConsumoForm(date = todayISO()): NovadisConsumoForm {
+  return {
+    data: date,
+    tipo: "imperial",
+    quantidade: ""
+  };
+}
+
 function normalizeNovadisTipo(value: string | null | undefined): NovadisTipo {
   return NOVADIS_TIPOS.some((item) => item.tipo === value) ? (value as NovadisTipo) : "imperial";
 }
@@ -463,6 +479,15 @@ function normalizeNovadisBarril(barril: NovadisBarril): NovadisBarril {
   return {
     ...barril,
     tipo: normalizeNovadisTipo(rawBarril.tipo)
+  };
+}
+
+function normalizeNovadisConsumo(consumo: NovadisConsumo): NovadisConsumo {
+  const rawConsumo = consumo as NovadisConsumo & { tipo?: string | null };
+
+  return {
+    ...consumo,
+    tipo: normalizeNovadisTipo(rawConsumo.tipo)
   };
 }
 
@@ -595,6 +620,7 @@ function readDemoStore(): DemoStore {
       despesas: [],
       pagamentosAgente: [],
       novadisBarris: [],
+      novadisConsumos: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -611,6 +637,7 @@ function readDemoStore(): DemoStore {
       despesas: [],
       pagamentosAgente: [],
       novadisBarris: [],
+      novadisConsumos: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -630,6 +657,7 @@ function readDemoStore(): DemoStore {
       despesas,
       pagamentosAgente: parsed.pagamentosAgente ?? [],
       novadisBarris: (parsed.novadisBarris ?? []).map(normalizeNovadisBarril),
+      novadisConsumos: (parsed.novadisConsumos ?? []).map(normalizeNovadisConsumo),
       tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
@@ -642,6 +670,7 @@ function readDemoStore(): DemoStore {
       despesas: [],
       pagamentosAgente: [],
       novadisBarris: [],
+      novadisConsumos: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -782,6 +811,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [pagamentosAgente, setPagamentosAgente] = useState<PagamentoAgente[]>([]);
   const [novadisConfig, setNovadisConfig] = useState<NovadisConfig>(baseNovadisConfig);
   const [novadisBarris, setNovadisBarris] = useState<NovadisBarril[]>([]);
+  const [novadisConsumos, setNovadisConsumos] = useState<NovadisConsumo[]>([]);
   const [agenteConfigForm, setAgenteConfigForm] = useState<AgenteConfigForm>(() =>
     agenteConfigToForm(baseAgenteConfig)
   );
@@ -792,6 +822,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     novadisConfigToForm(baseNovadisConfig)
   );
   const [novadisBarrilForm, setNovadisBarrilForm] = useState<NovadisBarrilForm>(() => emptyNovadisBarrilForm());
+  const [novadisConsumoForm, setNovadisConsumoForm] = useState<NovadisConsumoForm>(() =>
+    emptyNovadisConsumoForm(startDate)
+  );
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
   const [tipoDespesaForm, setTipoDespesaForm] = useState<TipoDespesaForm>(() => emptyTipoDespesaForm());
@@ -809,6 +842,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [pagamentoAgenteSaving, setPagamentoAgenteSaving] = useState(false);
   const [novadisConfigSaving, setNovadisConfigSaving] = useState(false);
   const [novadisBarrilSaving, setNovadisBarrilSaving] = useState(false);
+  const [novadisConsumoSaving, setNovadisConsumoSaving] = useState(false);
   const [overviewOnlyFestaTotal, setOverviewOnlyFestaTotal] = useState(false);
   const [overviewOnlyFestaSaldo, setOverviewOnlyFestaSaldo] = useState(false);
   const [notice, setNotice] = useState("");
@@ -1088,20 +1122,34 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     const quantidade = novadisBarris
       .filter((barril) => normalizeNovadisTipo(barril.tipo) === item.tipo)
       .reduce((acc, barril) => acc + Number(barril.quantidade), 0);
+    const gasto = novadisConsumos
+      .filter((consumo) => normalizeNovadisTipo(consumo.tipo) === item.tipo)
+      .reduce((acc, consumo) => acc + Number(consumo.quantidade), 0);
     const valorUnitario = Number(novadisConfig[item.valorKey]);
     const valorTara = Number(novadisConfig[item.taraKey]);
+    const cheiosADevolver = Math.max(quantidade - gasto, 0);
+    const vaziosADevolver = Math.min(gasto, quantidade);
 
     return {
       ...item,
       quantidade,
+      gasto,
+      cheiosADevolver,
+      vaziosADevolver,
       valorTotal: quantidade * valorUnitario,
-      taraTotal: quantidade * valorTara
+      taraTotal: quantidade * valorTara,
+      valorCheiosADevolver: cheiosADevolver * valorUnitario,
+      valorVaziosADevolver: vaziosADevolver * valorTara
     };
   });
   const novadisTotalBarris = novadisPorTipo.reduce((acc, item) => acc + item.quantidade, 0);
   const novadisValorBarris = novadisPorTipo.reduce((acc, item) => acc + item.valorTotal, 0);
-  const novadisValorTara = novadisPorTipo.reduce((acc, item) => acc + item.taraTotal, 0);
-  const novadisDiferenca = novadisValorBarris - novadisValorTara;
+  const novadisTotalGasto = novadisPorTipo.reduce((acc, item) => acc + item.gasto, 0);
+  const novadisTotalCheiosADevolver = novadisPorTipo.reduce((acc, item) => acc + item.cheiosADevolver, 0);
+  const novadisTotalVaziosADevolver = novadisPorTipo.reduce((acc, item) => acc + item.vaziosADevolver, 0);
+  const novadisValorCheiosADevolver = novadisPorTipo.reduce((acc, item) => acc + item.valorCheiosADevolver, 0);
+  const novadisValorVaziosADevolver = novadisPorTipo.reduce((acc, item) => acc + item.valorVaziosADevolver, 0);
+  const novadisValorDevolucao = novadisValorCheiosADevolver + novadisValorVaziosADevolver;
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -1201,6 +1249,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       setNovadisConfig(nextConfig);
       setNovadisConfigForm(novadisConfigToForm(nextConfig));
       setNovadisBarris((store.novadisBarris ?? []).map(normalizeNovadisBarril));
+      setNovadisConsumos((store.novadisConsumos ?? []).map(normalizeNovadisConsumo));
       return;
     }
 
@@ -1210,12 +1259,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       setNovadisConfig(nextConfig);
       setNovadisConfigForm(novadisConfigToForm(nextConfig));
       setNovadisBarris([]);
+      setNovadisConsumos([]);
       return;
     }
 
-    const [configResult, barrisResult] = await Promise.all([
+    const [configResult, barrisResult, consumosResult] = await Promise.all([
       supabase.rpc("app_obter_novadis_config", { p_token: sessionToken }),
-      supabase.rpc("app_listar_novadis_barris", { p_token: sessionToken })
+      supabase.rpc("app_listar_novadis_barris", { p_token: sessionToken }),
+      supabase.rpc("app_listar_novadis_consumos", { p_token: sessionToken })
     ]);
 
     if (configResult.error) {
@@ -1228,11 +1279,17 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    if (consumosResult.error) {
+      setError(consumosResult.error.message);
+      return;
+    }
+
     const nextConfig = normalizeNovadisConfig(configResult.data?.[0]);
 
     setNovadisConfig(nextConfig);
     setNovadisConfigForm(novadisConfigToForm(nextConfig));
     setNovadisBarris((barrisResult.data ?? []).map(normalizeNovadisBarril));
+    setNovadisConsumos((consumosResult.data ?? []).map(normalizeNovadisConsumo));
   }, [isDemoMode, sessionToken, supabase]);
 
   const loadData = useCallback(async () => {
@@ -1443,6 +1500,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   useEffect(() => {
     setForm((current) => ({ ...current, data: selectedDate }));
     setDespesaForm((current) => ({ ...current, data: selectedDate }));
+    setNovadisConsumoForm((current) => ({ ...current, data: selectedDate }));
   }, [selectedDate]);
 
   useEffect(() => {
@@ -1546,6 +1604,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setNovadisConfigForm(novadisConfigToForm(baseNovadisConfig));
     setNovadisBarris([]);
     setNovadisBarrilForm(emptyNovadisBarrilForm());
+    setNovadisConsumos([]);
+    setNovadisConsumoForm(emptyNovadisConsumoForm(startDate));
   }
 
   function handleSelectDia(value: string) {
@@ -2640,6 +2700,82 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     await loadNovadisData();
   }
 
+  async function handleRegisterNovadisConsumo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const quantidade = Number.parseInt(novadisConsumoForm.quantidade, 10);
+    const tipo = normalizeNovadisTipo(novadisConsumoForm.tipo);
+    const consumoDia = orderedDiasFesta.find((dia) => dia.data === novadisConsumoForm.data) ?? null;
+    const availableItem = novadisPorTipo.find((item) => item.tipo === tipo);
+    const disponivel = availableItem?.cheiosADevolver ?? 0;
+
+    if (!consumoDia) {
+      setError("Escolhe um dia da festa para registar o gasto.");
+      return;
+    }
+
+    if (consumoDia.fechado) {
+      setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
+
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      setError("Indica uma quantidade maior que zero.");
+      return;
+    }
+
+    if (quantidade > disponivel) {
+      setError(`Só existem ${disponivel} ${getNovadisUnitLabel(tipo, disponivel)} disponíveis para ${getNovadisTipoLabel(tipo)}.`);
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextConsumo: NovadisConsumo = {
+        id: makeId("novadis-consumo"),
+        data: novadisConsumoForm.data,
+        tipo,
+        quantidade,
+        criado_por_id: null,
+        criado_por_nome: currentUserName,
+        created_at: new Date().toISOString()
+      };
+      const nextConsumos = [nextConsumo, ...(store.novadisConsumos ?? [])];
+
+      writeDemoStore({ ...store, novadisConsumos: nextConsumos });
+      setNovadisConsumos(nextConsumos);
+      setNovadisConsumoForm((current) => ({ ...current, quantidade: "" }));
+      setNotice("Gasto Novadis registado.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setNovadisConsumoSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_registar_novadis_consumo", {
+      p_token: sessionToken,
+      p_data: novadisConsumoForm.data,
+      p_tipo: tipo,
+      p_quantidade: quantidade
+    });
+
+    setNovadisConsumoSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setNovadisConsumoForm((current) => ({ ...current, quantidade: "" }));
+    setNotice("Gasto Novadis registado.");
+    await loadNovadisData();
+  }
+
   async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -3425,26 +3561,31 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         <>
           <section className="summary-grid" aria-label="Totais Novadis">
             <article className="metric metric-total">
-              <span>Valor total</span>
+              <span>Valor recebido</span>
               <strong>{formatCurrency(novadisValorBarris)}</strong>
               <small>{novadisTotalBarris} unidades registadas</small>
             </article>
             <article className="metric metric-total">
-              <span>Valor tara</span>
-              <strong>{formatCurrency(novadisValorTara)}</strong>
-              <small>Tara total dos registos</small>
+              <span>Valor devolução</span>
+              <strong>{formatCurrency(novadisValorDevolucao)}</strong>
+              <small>
+                Cheios {formatCurrency(novadisValorCheiosADevolver)} · Tara{" "}
+                {formatCurrency(novadisValorVaziosADevolver)}
+              </small>
             </article>
             <article className="metric metric-total">
-              <span>Diferença</span>
-              <strong>{formatCurrency(novadisDiferenca)}</strong>
-              <small>Valor total menos tara</small>
+              <span>Gasto</span>
+              <strong>{novadisTotalGasto}</strong>
+              <small>
+                {novadisTotalCheiosADevolver} cheios · {novadisTotalVaziosADevolver} vazios
+              </small>
             </article>
             {novadisPorTipo.map((item) => (
               <article className="metric" key={item.tipo}>
                 <span>{item.label}</span>
-                <strong>{item.quantidade}</strong>
+                <strong>{item.cheiosADevolver}</strong>
                 <small>
-                  {getNovadisUnitLabel(item.tipo, item.quantidade)} · {formatCurrency(item.valorTotal)}
+                  Cheios · {item.vaziosADevolver} vazios · {formatCurrency(item.valorCheiosADevolver + item.valorVaziosADevolver)}
                 </small>
               </article>
             ))}
@@ -3466,11 +3607,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 onClick={() => {
                   void loadNovadisData();
                 }}
-                disabled={novadisConfigSaving || novadisBarrilSaving}
+                disabled={novadisConfigSaving || novadisBarrilSaving || novadisConsumoSaving}
               >
                 <RefreshCw
                   size={18}
-                  className={novadisConfigSaving || novadisBarrilSaving ? "spin" : ""}
+                  className={novadisConfigSaving || novadisBarrilSaving || novadisConsumoSaving ? "spin" : ""}
                   aria-hidden="true"
                 />
                 Atualizar
@@ -3588,6 +3729,129 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           </section>
 
           <section className="panel">
+            <div className="panel-heading">
+              <div className="heading-icon">
+                <Receipt size={20} aria-hidden="true" />
+              </div>
+              <div>
+                <p className="eyebrow">Consignação</p>
+                <h2>Gasto diário</h2>
+                <span className="panel-subtitle">O gasto desconta no stock cheio e passa a contar como tara.</span>
+              </div>
+            </div>
+
+            <form className="novadis-consumo-form" onSubmit={handleRegisterNovadisConsumo}>
+              <label>
+                Dia
+                <select
+                  value={orderedDiasFesta.length ? novadisConsumoForm.data : ""}
+                  onChange={(event) =>
+                    setNovadisConsumoForm((current) => ({
+                      ...current,
+                      data: event.target.value
+                    }))
+                  }
+                  disabled={!orderedDiasFesta.length || novadisConsumoSaving}
+                >
+                  {orderedDiasFesta.length ? null : <option value="">Criar dia na Gestão</option>}
+                  {orderedDiasFesta.map((dia) => (
+                    <option key={dia.id} value={dia.data}>
+                      {dia.nome} · {formatDateLabel(dia.data)} {dia.fechado ? "· fechado" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Tipo
+                <select
+                  value={novadisConsumoForm.tipo}
+                  onChange={(event) =>
+                    setNovadisConsumoForm((current) => ({
+                      ...current,
+                      tipo: normalizeNovadisTipo(event.target.value)
+                    }))
+                  }
+                  disabled={novadisConsumoSaving}
+                >
+                  {NOVADIS_TIPOS.map((item) => (
+                    <option key={item.tipo} value={item.tipo}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Quantidade gasta
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={novadisConsumoForm.quantidade}
+                  onChange={(event) =>
+                    setNovadisConsumoForm((current) => ({ ...current, quantidade: event.target.value }))
+                  }
+                  placeholder="0"
+                  required
+                  disabled={novadisConsumoSaving}
+                />
+              </label>
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={novadisConsumoSaving || !orderedDiasFesta.length}
+              >
+                <Save size={18} aria-hidden="true" />
+                {novadisConsumoSaving ? "A registar" : "Registar gasto"}
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Devolução</p>
+                <h2>Resumo de consignação</h2>
+              </div>
+            </div>
+
+            <div className="table-wrap">
+              <table className="agent-table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Recebido</th>
+                    <th>Gasto</th>
+                    <th>Cheios a devolver</th>
+                    <th>Valor cheios</th>
+                    <th>Vazios / tara</th>
+                    <th>Valor tara</th>
+                    <th>Total devolução</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {novadisPorTipo.map((item) => (
+                    <tr key={item.tipo}>
+                      <td>{item.label}</td>
+                      <td>{item.quantidade}</td>
+                      <td>{item.gasto}</td>
+                      <td>
+                        <strong>{item.cheiosADevolver}</strong>
+                      </td>
+                      <td>{formatCurrency(item.valorCheiosADevolver)}</td>
+                      <td>{item.vaziosADevolver}</td>
+                      <td>{formatCurrency(item.valorVaziosADevolver)}</td>
+                      <td>
+                        <strong>{formatCurrency(item.valorCheiosADevolver + item.valorVaziosADevolver)}</strong>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="panel">
             <div className="panel-heading table-heading">
               <div>
                 <p className="eyebrow">Histórico</p>
@@ -3639,6 +3903,56 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </div>
             ) : (
               <div className="empty-state compact">Ainda não existem registos Novadis.</div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Histórico</p>
+                <h2>Gastos por dia</h2>
+              </div>
+            </div>
+
+            {novadisConsumos.length ? (
+              <div className="table-wrap">
+                <table className="agent-table">
+                  <thead>
+                    <tr>
+                      <th>Dia</th>
+                      <th>Registado em</th>
+                      <th>Tipo</th>
+                      <th>Quantidade</th>
+                      <th>Valor tara</th>
+                      <th>Registado por</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {novadisConsumos.map((consumo) => {
+                      const tipo = normalizeNovadisTipo(consumo.tipo);
+                      const item = NOVADIS_TIPOS.find((current) => current.tipo === tipo) ?? NOVADIS_TIPOS[0];
+                      const quantidade = Number(consumo.quantidade);
+                      const valorTara = quantidade * Number(novadisConfig[item.taraKey]);
+
+                      return (
+                        <tr key={consumo.id}>
+                          <td>{formatDateLabel(consumo.data)}</td>
+                          <td>{formatDateTimeLabel(consumo.created_at)}</td>
+                          <td>{getNovadisTipoLabel(tipo)}</td>
+                          <td>
+                            <strong>{quantidade}</strong>
+                            <span>{getNovadisUnitLabel(tipo, quantidade)}</span>
+                          </td>
+                          <td>{formatCurrency(valorTara)}</td>
+                          <td>{consumo.criado_por_nome}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem gastos Novadis registados.</div>
             )}
           </section>
         </>
