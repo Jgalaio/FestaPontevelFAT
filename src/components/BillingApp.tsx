@@ -65,7 +65,8 @@ type DemoStore = {
 
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "agente" | "dias" | "postos" | "tipos" | "utilizadores";
-type BillingAppMode = "agent" | "novadis" | "overview" | "register" | "management" | "reports";
+type StockTab = "novadis";
+type BillingAppMode = "agent" | "novadis" | "stocks" | "overview" | "register" | "management" | "reports";
 type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
 type BillingAppProps = {
@@ -845,7 +846,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const isManagementMode = mode === "management";
   const isReportsMode = mode === "reports";
   const isAgentMode = mode === "agent";
-  const isNovadisMode = mode === "novadis";
+  const isStocksMode = mode === "stocks" || mode === "novadis";
   const startDate = useMemo(() => todayISO(), []);
 
   const [appSession, setAppSession] = useState<AppSession | null>(null);
@@ -888,6 +889,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [diaForm, setDiaForm] = useState<DiaForm>(() => emptyDiaForm(startDate));
   const [entryTab, setEntryTab] = useState<EntryTab>("faturacao");
   const [sideTab, setSideTab] = useState<SideTab>("dias");
+  const [stockTab, setStockTab] = useState<StockTab>("novadis");
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -904,6 +906,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [overviewOnlyFestaSaldo, setOverviewOnlyFestaSaldo] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const isNovadisMode = isStocksMode && stockTab === "novadis";
 
   const activePostos = useMemo(
     () => postos.filter((posto) => posto.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
@@ -3032,8 +3035,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   ? "Relatórios"
                   : isAgentMode
                     ? "Pag.Agente"
-                    : isNovadisMode
-                      ? "Novadis"
+                    : isStocksMode
+                      ? "Stocks"
                       : "Gestão"}
           </h1>
         </div>
@@ -3083,9 +3086,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <HandCoins size={18} aria-hidden="true" />
           Pag.Agente
         </Link>
-        <Link className={`app-nav-link ${isNovadisMode ? "active" : ""}`} href="/novadis">
-          <Beer size={18} aria-hidden="true" />
-          Novadis
+        <Link className={`app-nav-link ${isStocksMode ? "active" : ""}`} href="/stocks">
+          <Tags size={18} aria-hidden="true" />
+          Stocks
         </Link>
         <Link className={`app-nav-link ${isManagementMode ? "active" : ""}`} href="/gestao">
           <Settings size={18} aria-hidden="true" />
@@ -3665,6 +3668,23 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </>
       ) : null}
 
+      {isStocksMode ? (
+        <section className="stock-tabs-shell" aria-label="Stocks">
+          <div className="side-tabs stock-tabs" role="tablist" aria-label="Secções de stocks">
+            <button
+              className={`tab-button ${stockTab === "novadis" ? "active" : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={stockTab === "novadis"}
+              onClick={() => setStockTab("novadis")}
+            >
+              <Beer size={18} aria-hidden="true" />
+              Novadis
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {isNovadisMode ? (
         <>
           <section className="summary-grid" aria-label="Totais Novadis">
@@ -4128,7 +4148,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </section>
       ) : null}
 
-      {!isOverviewMode && !isReportsMode && !isAgentMode && !isNovadisMode ? (
+      {!isOverviewMode && !isReportsMode && !isAgentMode && !isStocksMode ? (
         <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
           {isRegisterMode ? (
             <section className="panel entry-panel" id="entry-panel">

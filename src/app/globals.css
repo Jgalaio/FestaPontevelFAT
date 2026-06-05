@@ -742,6 +742,15 @@ input:disabled {
   margin-bottom: 16px;
 }
 
+.stock-tabs-shell {
+  margin-bottom: 16px;
+}
+
+.stock-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 220px));
+  margin-bottom: 0;
+}
+
 .tab-button {
   display: inline-flex;
   align-items: center;

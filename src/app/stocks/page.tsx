@@ -1,5 +1,5 @@
 import { BillingApp } from "@/components/BillingApp";
 
-export default function NovadisPage() {
+export default function StocksPage() {
   return <BillingApp mode="stocks" />;
 }
