@@ -4634,6 +4634,15 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <strong>{tabaqueiraPorMarca.length}</strong>
               <small>{tabaqueiraSaidas.length} saídas registadas</small>
             </article>
+            {tabaqueiraPorMarca.map((item) => (
+              <article className="metric" key={item.marca}>
+                <span>{item.marca}</span>
+                <strong>{item.stock}</strong>
+                <small>
+                  Fornecedor {formatCurrency(item.valorFornecedorStock)} · PVP {formatCurrency(item.valorPvpStock)}
+                </small>
+              </article>
+            ))}
           </section>
 
           <section className="panel">
