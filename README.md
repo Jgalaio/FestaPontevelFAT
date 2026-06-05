@@ -24,7 +24,7 @@ Sem variáveis Supabase, a app abre em modo de demonstração e guarda dados no 
 
 1. Criar um projeto no Supabase.
 2. Abrir `SQL Editor`.
-3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql`, `supabase/add-pag-agente.sql`, `supabase/admin-delete-guard.sql` e `supabase/add-novadis.sql`.
+3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql`, `supabase/add-pag-agente.sql`, `supabase/admin-delete-guard.sql`, `supabase/add-novadis.sql` e `supabase/add-tabaqueira.sql`.
 4. Copiar `Project URL` e a `publishable key`.
 
 Depois preencher:
@@ -51,6 +51,7 @@ supabase/add-imagem-fatura-despesas.sql
 supabase/add-pag-agente.sql
 supabase/admin-delete-guard.sql
 supabase/add-novadis.sql
+supabase/add-tabaqueira.sql
 ```
 
 Essa atualização cria:
@@ -64,9 +65,10 @@ Essa atualização cria:
 - `agente_config` e `pagamentos_agente`, com valor necessário, valores-base e entregas ao agente
 - proteção para apagar faturação/despesas apenas com papel `admin`
 - `novadis_config`, `novadis_barris` e `novadis_consumos`, com valor unitário/tara por tipo, histórico recebido e gasto diário
+- `tabaqueira_entradas` e `tabaqueira_saidas`, com stock recebido, preço fornecedor, PVP, saídas por posto e edição justificada
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
-- funções RPC para login, faturação, despesas, pagamentos, dias, postos e gestão de utilizadores
+- funções RPC para login, faturação, despesas, pagamentos, dias, postos, stocks e gestão de utilizadores
 
 Utilizadores iniciais:
 
@@ -105,12 +107,16 @@ git push -u origin main
 - `novadis_config`: valor unitário e valor de tara para Imperial, Cidra, Sangria e Garrafas de CO2, editáveis apenas por `admin`
 - `novadis_barris`: registos Novadis recebidos, tipo, quantidade, data/hora e utilizador
 - `novadis_consumos`: gastos Novadis por dia, tipo, quantidade, data/hora e utilizador
+- `tabaqueira_entradas`: marca, quantidade recebida, preço fornecedor, PVP, data/hora e utilizador
+- `tabaqueira_saidas`: marca, quantidade saída, quem levou, posto de destino, edição justificada e utilizadores envolvidos
 - `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia
 
 Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor desse dia. Quando um dia é fechado, a base de dados bloqueia novas alterações de faturação e despesas para essa data.
 
 Os valores da Novadis são apresentados em `Stocks > Novadis` e não entram nos totais da festa. Na consignação, as unidades cheias a devolver contam pelo valor unitário e as unidades gastas/vazias contam pelo valor da tara. O resumo de consignação permite editar o total gasto por produto para corrigir enganos de lançamento.
+
+A Tabaqueira fica em `Stocks > Tabaqueira`. Permite registar receções por marca, quantidade, preço fornecedor e PVP, e controlar saídas por marca, pessoa que levou e posto de destino. Saídas podem ser editadas com justificação; apenas utilizadores `admin` podem apagar saídas.
 
 ## Próximos passos recomendados
 

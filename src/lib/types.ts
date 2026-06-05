@@ -146,6 +146,33 @@ export type NovadisConsumo = {
   created_at: string;
 };
 
+export type TabaqueiraEntrada = {
+  id: string;
+  marca: string;
+  quantidade: number;
+  preco_fornecedor: number;
+  pvp: number;
+  criado_por_id: string | null;
+  criado_por_nome: string;
+  created_at: string;
+};
+
+export type TabaqueiraSaida = {
+  id: string;
+  marca: string;
+  quantidade: number;
+  levado_por: string;
+  posto_id: string | null;
+  posto_nome: string;
+  justificacao_edicao: string | null;
+  criado_por_id: string | null;
+  criado_por_nome: string;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuditoriaRegisto = {
   id: string;
   registo_id: string | null;
@@ -439,6 +466,48 @@ export type Database = {
         Update: Partial<NovadisConsumo>;
         Relationships: [];
       };
+      tabaqueira_entradas: {
+        Row: TabaqueiraEntrada;
+        Insert: {
+          id?: string;
+          marca: string;
+          quantidade: number;
+          preco_fornecedor?: number;
+          pvp?: number;
+          criado_por_id?: string | null;
+          criado_por_nome: string;
+          created_at?: string;
+        };
+        Update: Partial<TabaqueiraEntrada>;
+        Relationships: [];
+      };
+      tabaqueira_saidas: {
+        Row: TabaqueiraSaida;
+        Insert: {
+          id?: string;
+          marca: string;
+          quantidade: number;
+          levado_por: string;
+          posto_id?: string | null;
+          posto_nome: string;
+          justificacao_edicao?: string | null;
+          criado_por_id?: string | null;
+          criado_por_nome: string;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<TabaqueiraSaida>;
+        Relationships: [
+          {
+            foreignKeyName: "tabaqueira_saidas_posto_id_fkey";
+            columns: ["posto_id"];
+            referencedRelation: "postos";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       registos_faturacao_auditoria: {
         Row: AuditoriaRegisto;
         Insert: {
@@ -650,6 +719,40 @@ export type Database = {
       app_definir_novadis_consumo_total: {
         Args: { p_token: string; p_data: string; p_tipo: NovadisTipo; p_quantidade: number };
         Returns: NovadisConsumo[];
+      };
+      app_listar_tabaqueira_entradas: {
+        Args: { p_token: string };
+        Returns: TabaqueiraEntrada[];
+      };
+      app_registar_tabaqueira_entrada: {
+        Args: {
+          p_token: string;
+          p_marca: string;
+          p_quantidade: number;
+          p_preco_fornecedor?: number;
+          p_pvp?: number;
+        };
+        Returns: TabaqueiraEntrada[];
+      };
+      app_listar_tabaqueira_saidas: {
+        Args: { p_token: string };
+        Returns: TabaqueiraSaida[];
+      };
+      app_guardar_tabaqueira_saida: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_marca: string;
+          p_quantidade: number;
+          p_levado_por: string;
+          p_posto_id?: string | null;
+          p_justificacao_edicao?: string | null;
+        };
+        Returns: TabaqueiraSaida[];
+      };
+      app_apagar_tabaqueira_saida: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
       };
       app_login: {
         Args: { p_username: string; p_password: string };

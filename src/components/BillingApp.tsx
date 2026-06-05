@@ -46,6 +46,8 @@ import type {
   NovadisConsumo,
   NovadisTipo,
   PagamentoAgente,
+  TabaqueiraEntrada,
+  TabaqueiraSaida,
   TipoDespesa,
   Utilizador
 } from "@/lib/types";
@@ -61,11 +63,13 @@ type DemoStore = {
   novadisConfig: NovadisConfig;
   novadisBarris: NovadisBarril[];
   novadisConsumos: NovadisConsumo[];
+  tabaqueiraEntradas: TabaqueiraEntrada[];
+  tabaqueiraSaidas: TabaqueiraSaida[];
 };
 
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "agente" | "dias" | "postos" | "tipos" | "utilizadores";
-type StockTab = "novadis";
+type StockTab = "novadis" | "tabaqueira";
 type BillingAppMode = "agent" | "novadis" | "stocks" | "overview" | "register" | "management" | "reports";
 type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
@@ -131,6 +135,22 @@ type NovadisConsumoForm = {
   data: string;
   tipo: NovadisTipo;
   quantidade: string;
+};
+
+type TabaqueiraEntradaForm = {
+  marca: string;
+  quantidade: string;
+  precoFornecedor: string;
+  pvp: string;
+};
+
+type TabaqueiraSaidaForm = {
+  id: string | null;
+  marca: string;
+  quantidade: string;
+  levadoPor: string;
+  postoId: string;
+  justificacao: string;
 };
 
 type NovadisValorKey =
@@ -455,6 +475,30 @@ function emptyNovadisConsumoForm(date = todayISO()): NovadisConsumoForm {
   };
 }
 
+function emptyTabaqueiraEntradaForm(): TabaqueiraEntradaForm {
+  return {
+    marca: "",
+    quantidade: "",
+    precoFornecedor: "",
+    pvp: ""
+  };
+}
+
+function emptyTabaqueiraSaidaForm(): TabaqueiraSaidaForm {
+  return {
+    id: null,
+    marca: "",
+    quantidade: "",
+    levadoPor: "",
+    postoId: "",
+    justificacao: ""
+  };
+}
+
+function normalizeTabaqueiraMarca(value: string | null | undefined) {
+  return (value ?? "").trim().replace(/\s+/g, " ");
+}
+
 function normalizeNovadisTipo(value: string | null | undefined): NovadisTipo {
   return NOVADIS_TIPOS.some((item) => item.tipo === value) ? (value as NovadisTipo) : "imperial";
 }
@@ -489,6 +533,29 @@ function normalizeNovadisConsumo(consumo: NovadisConsumo): NovadisConsumo {
   return {
     ...consumo,
     tipo: normalizeNovadisTipo(rawConsumo.tipo)
+  };
+}
+
+function normalizeTabaqueiraEntrada(entrada: TabaqueiraEntrada): TabaqueiraEntrada {
+  return {
+    ...entrada,
+    marca: normalizeTabaqueiraMarca(entrada.marca),
+    quantidade: Number(entrada.quantidade),
+    preco_fornecedor: Number(entrada.preco_fornecedor ?? 0),
+    pvp: Number(entrada.pvp ?? 0)
+  };
+}
+
+function normalizeTabaqueiraSaida(saida: TabaqueiraSaida): TabaqueiraSaida {
+  return {
+    ...saida,
+    marca: normalizeTabaqueiraMarca(saida.marca),
+    quantidade: Number(saida.quantidade),
+    posto_id: saida.posto_id ?? null,
+    posto_nome: saida.posto_nome || "Posto removido",
+    justificacao_edicao: saida.justificacao_edicao ?? null,
+    atualizado_por_id: saida.atualizado_por_id ?? null,
+    atualizado_por_nome: saida.atualizado_por_nome ?? null
   };
 }
 
@@ -678,6 +745,8 @@ function readDemoStore(): DemoStore {
       pagamentosAgente: [],
       novadisBarris: [],
       novadisConsumos: [],
+      tabaqueiraEntradas: [],
+      tabaqueiraSaidas: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -695,6 +764,8 @@ function readDemoStore(): DemoStore {
       pagamentosAgente: [],
       novadisBarris: [],
       novadisConsumos: [],
+      tabaqueiraEntradas: [],
+      tabaqueiraSaidas: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -715,6 +786,8 @@ function readDemoStore(): DemoStore {
       pagamentosAgente: parsed.pagamentosAgente ?? [],
       novadisBarris: (parsed.novadisBarris ?? []).map(normalizeNovadisBarril),
       novadisConsumos: (parsed.novadisConsumos ?? []).map(normalizeNovadisConsumo),
+      tabaqueiraEntradas: (parsed.tabaqueiraEntradas ?? []).map(normalizeTabaqueiraEntrada),
+      tabaqueiraSaidas: (parsed.tabaqueiraSaidas ?? []).map(normalizeTabaqueiraSaida),
       tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
@@ -728,6 +801,8 @@ function readDemoStore(): DemoStore {
       pagamentosAgente: [],
       novadisBarris: [],
       novadisConsumos: [],
+      tabaqueiraEntradas: [],
+      tabaqueiraSaidas: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -870,6 +945,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [novadisConfig, setNovadisConfig] = useState<NovadisConfig>(baseNovadisConfig);
   const [novadisBarris, setNovadisBarris] = useState<NovadisBarril[]>([]);
   const [novadisConsumos, setNovadisConsumos] = useState<NovadisConsumo[]>([]);
+  const [tabaqueiraEntradas, setTabaqueiraEntradas] = useState<TabaqueiraEntrada[]>([]);
+  const [tabaqueiraSaidas, setTabaqueiraSaidas] = useState<TabaqueiraSaida[]>([]);
   const [agenteConfigForm, setAgenteConfigForm] = useState<AgenteConfigForm>(() =>
     agenteConfigToForm(baseAgenteConfig)
   );
@@ -882,6 +959,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [novadisBarrilForm, setNovadisBarrilForm] = useState<NovadisBarrilForm>(() => emptyNovadisBarrilForm());
   const [novadisConsumoForm, setNovadisConsumoForm] = useState<NovadisConsumoForm>(() =>
     emptyNovadisConsumoForm(startDate)
+  );
+  const [tabaqueiraEntradaForm, setTabaqueiraEntradaForm] = useState<TabaqueiraEntradaForm>(() =>
+    emptyTabaqueiraEntradaForm()
+  );
+  const [tabaqueiraSaidaForm, setTabaqueiraSaidaForm] = useState<TabaqueiraSaidaForm>(() =>
+    emptyTabaqueiraSaidaForm()
   );
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
@@ -902,11 +985,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [novadisConfigSaving, setNovadisConfigSaving] = useState(false);
   const [novadisBarrilSaving, setNovadisBarrilSaving] = useState(false);
   const [novadisConsumoSaving, setNovadisConsumoSaving] = useState(false);
+  const [tabaqueiraEntradaSaving, setTabaqueiraEntradaSaving] = useState(false);
+  const [tabaqueiraSaidaSaving, setTabaqueiraSaidaSaving] = useState(false);
   const [overviewOnlyFestaTotal, setOverviewOnlyFestaTotal] = useState(false);
   const [overviewOnlyFestaSaldo, setOverviewOnlyFestaSaldo] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const isNovadisMode = isStocksMode && stockTab === "novadis";
+  const isTabaqueiraMode = isStocksMode && stockTab === "tabaqueira";
 
   const activePostos = useMemo(
     () => postos.filter((posto) => posto.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
@@ -1165,6 +1251,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
   const isEditingRegisto = Boolean(editingRegisto);
   const isEditingDespesa = Boolean(editingDespesa);
+  const isEditingTabaqueiraSaida = Boolean(tabaqueiraSaidaForm.id);
   const agenteValoresBase =
     Number(agenteConfig.valor_eventos_anual) +
     Number(agenteConfig.valor_patrocinios) +
@@ -1211,6 +1298,42 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const novadisValorCheiosADevolver = novadisPorTipo.reduce((acc, item) => acc + item.valorCheiosADevolver, 0);
   const novadisValorVaziosADevolver = novadisPorTipo.reduce((acc, item) => acc + item.valorVaziosADevolver, 0);
   const novadisValorDevolucao = novadisValorCheiosADevolver + novadisValorVaziosADevolver;
+  const tabaqueiraPorMarca = useMemo(() => Array.from(
+    new Set([
+      ...tabaqueiraEntradas.map((entrada) => normalizeTabaqueiraMarca(entrada.marca)),
+      ...tabaqueiraSaidas.map((saida) => normalizeTabaqueiraMarca(saida.marca))
+    ])
+  )
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
+    .map((marca) => {
+      const entradasMarca = tabaqueiraEntradas.filter((entrada) => normalizeTabaqueiraMarca(entrada.marca) === marca);
+      const saidasMarca = tabaqueiraSaidas.filter((saida) => normalizeTabaqueiraMarca(saida.marca) === marca);
+      const recebido = entradasMarca.reduce((acc, entrada) => acc + Number(entrada.quantidade), 0);
+      const saido = saidasMarca.reduce((acc, saida) => acc + Number(saida.quantidade), 0);
+      const stock = Math.max(recebido - saido, 0);
+      const latestEntrada = entradasMarca
+        .slice()
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      const precoFornecedor = Number(latestEntrada?.preco_fornecedor ?? 0);
+      const pvp = Number(latestEntrada?.pvp ?? 0);
+
+      return {
+        marca,
+        recebido,
+        saido,
+        stock,
+        precoFornecedor,
+        pvp,
+        valorFornecedorStock: stock * precoFornecedor,
+        valorPvpStock: stock * pvp
+      };
+    }), [tabaqueiraEntradas, tabaqueiraSaidas]);
+  const tabaqueiraTotalRecebido = tabaqueiraPorMarca.reduce((acc, item) => acc + item.recebido, 0);
+  const tabaqueiraTotalSaido = tabaqueiraPorMarca.reduce((acc, item) => acc + item.saido, 0);
+  const tabaqueiraTotalStock = tabaqueiraPorMarca.reduce((acc, item) => acc + item.stock, 0);
+  const tabaqueiraValorFornecedorStock = tabaqueiraPorMarca.reduce((acc, item) => acc + item.valorFornecedorStock, 0);
+  const tabaqueiraValorPvpStock = tabaqueiraPorMarca.reduce((acc, item) => acc + item.valorPvpStock, 0);
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -1351,6 +1474,40 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setNovadisConfigForm(novadisConfigToForm(nextConfig));
     setNovadisBarris((barrisResult.data ?? []).map(normalizeNovadisBarril));
     setNovadisConsumos((consumosResult.data ?? []).map(normalizeNovadisConsumo));
+  }, [isDemoMode, sessionToken, supabase]);
+
+  const loadTabaqueiraData = useCallback(async () => {
+    if (isDemoMode) {
+      const store = readDemoStore();
+
+      setTabaqueiraEntradas((store.tabaqueiraEntradas ?? []).map(normalizeTabaqueiraEntrada));
+      setTabaqueiraSaidas((store.tabaqueiraSaidas ?? []).map(normalizeTabaqueiraSaida));
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setTabaqueiraEntradas([]);
+      setTabaqueiraSaidas([]);
+      return;
+    }
+
+    const [entradasResult, saidasResult] = await Promise.all([
+      supabase.rpc("app_listar_tabaqueira_entradas", { p_token: sessionToken }),
+      supabase.rpc("app_listar_tabaqueira_saidas", { p_token: sessionToken })
+    ]);
+
+    if (entradasResult.error) {
+      setError(entradasResult.error.message);
+      return;
+    }
+
+    if (saidasResult.error) {
+      setError(saidasResult.error.message);
+      return;
+    }
+
+    setTabaqueiraEntradas((entradasResult.data ?? []).map(normalizeTabaqueiraEntrada));
+    setTabaqueiraSaidas((saidasResult.data ?? []).map(normalizeTabaqueiraSaida));
   }, [isDemoMode, sessionToken, supabase]);
 
   const loadData = useCallback(async () => {
@@ -1559,6 +1716,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }, [isLoggedIn, isNovadisMode, loadNovadisData]);
 
   useEffect(() => {
+    if (isLoggedIn && isTabaqueiraMode) {
+      void loadTabaqueiraData();
+    }
+  }, [isLoggedIn, isTabaqueiraMode, loadTabaqueiraData]);
+
+  useEffect(() => {
     setForm((current) => ({ ...current, data: selectedDate }));
     setDespesaForm((current) => ({ ...current, data: selectedDate }));
     setNovadisConsumoForm((current) => ({ ...current, data: selectedDate }));
@@ -1592,6 +1755,22 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       setDespesaForm((current) => ({ ...current, postoId: activePostos[0].id }));
     }
   }, [activePostos, despesaForm.postoId]);
+
+  useEffect(() => {
+    const hasSelectedPosto = activePostos.some((posto) => posto.id === tabaqueiraSaidaForm.postoId);
+
+    if (!hasSelectedPosto && activePostos[0]) {
+      setTabaqueiraSaidaForm((current) => ({ ...current, postoId: activePostos[0].id }));
+    }
+  }, [activePostos, tabaqueiraSaidaForm.postoId]);
+
+  useEffect(() => {
+    const availableMarca = tabaqueiraPorMarca.find((item) => item.stock > 0)?.marca ?? "";
+
+    if (!tabaqueiraSaidaForm.id && availableMarca && !tabaqueiraSaidaForm.marca) {
+      setTabaqueiraSaidaForm((current) => ({ ...current, marca: availableMarca }));
+    }
+  }, [tabaqueiraPorMarca, tabaqueiraSaidaForm.id, tabaqueiraSaidaForm.marca]);
 
   useEffect(() => {
     if (despesaForm.id) {
@@ -1668,6 +1847,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setNovadisBarrilForm(emptyNovadisBarrilForm());
     setNovadisConsumos([]);
     setNovadisConsumoForm(emptyNovadisConsumoForm(startDate));
+    setTabaqueiraEntradas([]);
+    setTabaqueiraSaidas([]);
+    setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
+    setTabaqueiraSaidaForm(emptyTabaqueiraSaidaForm());
   }
 
   function handleSelectDia(value: string) {
@@ -2887,6 +3070,268 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     await loadNovadisData();
   }
 
+  function getTabaqueiraDisponivel(marca: string, ignoredSaidaId: string | null = null) {
+    const normalizedMarca = normalizeTabaqueiraMarca(marca);
+    const recebido = tabaqueiraEntradas
+      .filter((entrada) => normalizeTabaqueiraMarca(entrada.marca) === normalizedMarca)
+      .reduce((acc, entrada) => acc + Number(entrada.quantidade), 0);
+    const saido = tabaqueiraSaidas
+      .filter((saida) => normalizeTabaqueiraMarca(saida.marca) === normalizedMarca && saida.id !== ignoredSaidaId)
+      .reduce((acc, saida) => acc + Number(saida.quantidade), 0);
+
+    return Math.max(recebido - saido, 0);
+  }
+
+  async function handleRegisterTabaqueiraEntrada(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const marca = normalizeTabaqueiraMarca(tabaqueiraEntradaForm.marca);
+    const quantidade = Number.parseInt(tabaqueiraEntradaForm.quantidade, 10);
+    const precoFornecedor = parseMoney(tabaqueiraEntradaForm.precoFornecedor);
+    const pvp = parseMoney(tabaqueiraEntradaForm.pvp);
+
+    if (!marca) {
+      setError("Indica a marca do tabaco.");
+      return;
+    }
+
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      setError("Indica uma quantidade recebida maior que zero.");
+      return;
+    }
+
+    if (precoFornecedor < 0 || pvp < 0) {
+      setError("Os preços da Tabaqueira não podem ser negativos.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextEntrada: TabaqueiraEntrada = {
+        id: makeId("tabaqueira-entrada"),
+        marca,
+        quantidade,
+        preco_fornecedor: precoFornecedor,
+        pvp,
+        criado_por_id: null,
+        criado_por_nome: currentUserName,
+        created_at: new Date().toISOString()
+      };
+      const nextEntradas = [nextEntrada, ...(store.tabaqueiraEntradas ?? [])];
+
+      writeDemoStore({ ...store, tabaqueiraEntradas: nextEntradas });
+      setTabaqueiraEntradas(nextEntradas.map(normalizeTabaqueiraEntrada));
+      setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
+      setNotice("Tabaco recebido registado.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setTabaqueiraEntradaSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_registar_tabaqueira_entrada", {
+      p_token: sessionToken,
+      p_marca: marca,
+      p_quantidade: quantidade,
+      p_preco_fornecedor: precoFornecedor,
+      p_pvp: pvp
+    });
+
+    setTabaqueiraEntradaSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
+    setNotice("Tabaco recebido registado.");
+    await loadTabaqueiraData();
+  }
+
+  function handleCancelEditTabaqueiraSaida() {
+    setTabaqueiraSaidaForm((current) => ({
+      ...emptyTabaqueiraSaidaForm(),
+      marca: tabaqueiraPorMarca.find((item) => item.stock > 0)?.marca ?? "",
+      postoId: current.postoId || activePostos[0]?.id || ""
+    }));
+  }
+
+  async function handleSaveTabaqueiraSaida(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const marca = normalizeTabaqueiraMarca(tabaqueiraSaidaForm.marca);
+    const quantidade = Number.parseInt(tabaqueiraSaidaForm.quantidade, 10);
+    const levadoPor = tabaqueiraSaidaForm.levadoPor.trim();
+    const posto = postos.find((current) => current.id === tabaqueiraSaidaForm.postoId) ?? null;
+    const justificacao = tabaqueiraSaidaForm.justificacao.trim();
+    const editingId = tabaqueiraSaidaForm.id;
+
+    if (!marca) {
+      setError("Escolhe a marca do tabaco para a saída.");
+      return;
+    }
+
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      setError("Indica uma quantidade de saída maior que zero.");
+      return;
+    }
+
+    if (!levadoPor) {
+      setError("Indica quem levou o tabaco.");
+      return;
+    }
+
+    if (!posto) {
+      setError("Escolhe o posto de destino.");
+      return;
+    }
+
+    if (editingId && !justificacao) {
+      setError("Indica a justificação da alteração antes de guardar.");
+      return;
+    }
+
+    const disponivel = getTabaqueiraDisponivel(marca, editingId);
+
+    if (quantidade > disponivel) {
+      setError(`Só existem ${disponivel} maços/unidades disponíveis para ${marca}.`);
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const existingIndex = editingId ? store.tabaqueiraSaidas.findIndex((saida) => saida.id === editingId) : -1;
+      const existingSaida = existingIndex >= 0 ? normalizeTabaqueiraSaida(store.tabaqueiraSaidas[existingIndex]) : null;
+      const now = new Date().toISOString();
+      const nextSaida: TabaqueiraSaida = {
+        id: existingSaida?.id ?? makeId("tabaqueira-saida"),
+        marca,
+        quantidade,
+        levado_por: levadoPor,
+        posto_id: posto.id,
+        posto_nome: posto.nome,
+        justificacao_edicao: editingId ? justificacao : null,
+        criado_por_id: existingSaida?.criado_por_id ?? null,
+        criado_por_nome: existingSaida?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: editingId ? null : existingSaida?.atualizado_por_id ?? null,
+        atualizado_por_nome: editingId ? currentUserName : existingSaida?.atualizado_por_nome ?? null,
+        created_at: existingSaida?.created_at ?? now,
+        updated_at: now
+      };
+      const nextSaidas =
+        existingIndex >= 0
+          ? store.tabaqueiraSaidas.map((saida, index) => (index === existingIndex ? nextSaida : saida))
+          : [nextSaida, ...(store.tabaqueiraSaidas ?? [])];
+
+      writeDemoStore({ ...store, tabaqueiraSaidas: nextSaidas });
+      setTabaqueiraSaidas(nextSaidas.map(normalizeTabaqueiraSaida));
+      handleCancelEditTabaqueiraSaida();
+      setNotice(editingId ? "Saída de tabaco alterada." : "Saída de tabaco registada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setTabaqueiraSaidaSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_guardar_tabaqueira_saida", {
+      p_token: sessionToken,
+      p_id: editingId,
+      p_marca: marca,
+      p_quantidade: quantidade,
+      p_levado_por: levadoPor,
+      p_posto_id: posto.id,
+      p_justificacao_edicao: editingId ? justificacao : null
+    });
+
+    setTabaqueiraSaidaSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    handleCancelEditTabaqueiraSaida();
+    setNotice(editingId ? "Saída de tabaco alterada." : "Saída de tabaco registada.");
+    await loadTabaqueiraData();
+  }
+
+  function handleEditTabaqueiraSaida(saida: TabaqueiraSaida) {
+    setError("");
+    setNotice("");
+    setTabaqueiraSaidaForm({
+      id: saida.id,
+      marca: saida.marca,
+      quantidade: String(saida.quantidade),
+      levadoPor: saida.levado_por,
+      postoId: saida.posto_id ?? "",
+      justificacao: ""
+    });
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("tabaqueira-saida-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  async function handleDeleteTabaqueiraSaida(id: string) {
+    if (!canDeleteData) {
+      setError("Não tem privilégios para apagar dados inseridos.");
+      return;
+    }
+
+    const shouldDelete = window.confirm("Apagar esta saída de tabaco?");
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextSaidas = (store.tabaqueiraSaidas ?? []).filter((saida) => saida.id !== id);
+
+      writeDemoStore({ ...store, tabaqueiraSaidas: nextSaidas });
+      setTabaqueiraSaidas(nextSaidas.map(normalizeTabaqueiraSaida));
+      if (tabaqueiraSaidaForm.id === id) {
+        handleCancelEditTabaqueiraSaida();
+      }
+      setNotice("Saída de tabaco apagada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_tabaqueira_saida", {
+      p_token: sessionToken,
+      p_id: id
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    if (tabaqueiraSaidaForm.id === id) {
+      handleCancelEditTabaqueiraSaida();
+    }
+    setNotice("Saída de tabaco apagada.");
+    await loadTabaqueiraData();
+  }
+
   async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -3681,6 +4126,16 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <Beer size={18} aria-hidden="true" />
               Novadis
             </button>
+            <button
+              className={`tab-button ${stockTab === "tabaqueira" ? "active" : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={stockTab === "tabaqueira"}
+              onClick={() => setStockTab("tabaqueira")}
+            >
+              <Receipt size={18} aria-hidden="true" />
+              Tabaqueira
+            </button>
           </div>
         </section>
       ) : null}
@@ -4114,6 +4569,419 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </div>
             ) : (
               <div className="empty-state compact">Ainda não existem gastos Novadis registados.</div>
+            )}
+          </section>
+        </>
+      ) : null}
+
+      {isTabaqueiraMode ? (
+        <>
+          <section className="summary-grid" aria-label="Totais Tabaqueira">
+            <article className="metric metric-total">
+              <span>Stock atual</span>
+              <strong>{tabaqueiraTotalStock}</strong>
+              <small>
+                {tabaqueiraTotalRecebido} recebidos · {tabaqueiraTotalSaido} saídos
+              </small>
+            </article>
+            <article className="metric metric-total">
+              <span>Valor fornecedor</span>
+              <strong>{formatCurrency(tabaqueiraValorFornecedorStock)}</strong>
+              <small>Valor do stock pelo preço fornecedor</small>
+            </article>
+            <article className="metric metric-total">
+              <span>Valor PVP</span>
+              <strong>{formatCurrency(tabaqueiraValorPvpStock)}</strong>
+              <small>Valor do stock pelo preço de venda</small>
+            </article>
+            <article className="metric">
+              <span>Marcas</span>
+              <strong>{tabaqueiraPorMarca.length}</strong>
+              <small>{tabaqueiraSaidas.length} saídas registadas</small>
+            </article>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading">
+              <div className="heading-icon">
+                <Plus size={20} aria-hidden="true" />
+              </div>
+              <div>
+                <p className="eyebrow">Tabaqueira</p>
+                <h2>Receção de tabaco</h2>
+                <span className="panel-subtitle">Regista marca, quantidade recebida, preço fornecedor e PVP.</span>
+              </div>
+            </div>
+
+            <form className="tabaqueira-entrada-form" onSubmit={handleRegisterTabaqueiraEntrada}>
+              <label>
+                Marca
+                <input
+                  type="text"
+                  value={tabaqueiraEntradaForm.marca}
+                  onChange={(event) =>
+                    setTabaqueiraEntradaForm((current) => ({ ...current, marca: event.target.value }))
+                  }
+                  placeholder="Marca do tabaco"
+                  required
+                />
+              </label>
+              <label>
+                Quantidade
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={tabaqueiraEntradaForm.quantidade}
+                  onChange={(event) =>
+                    setTabaqueiraEntradaForm((current) => ({ ...current, quantidade: event.target.value }))
+                  }
+                  placeholder="0"
+                  required
+                />
+              </label>
+              <label>
+                Preço fornecedor
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={tabaqueiraEntradaForm.precoFornecedor}
+                  onChange={(event) =>
+                    setTabaqueiraEntradaForm((current) => ({ ...current, precoFornecedor: event.target.value }))
+                  }
+                  placeholder="0,00"
+                />
+              </label>
+              <label>
+                PVP
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={tabaqueiraEntradaForm.pvp}
+                  onChange={(event) =>
+                    setTabaqueiraEntradaForm((current) => ({ ...current, pvp: event.target.value }))
+                  }
+                  placeholder="0,00"
+                />
+              </label>
+              <button className="primary-button" type="submit" disabled={tabaqueiraEntradaSaving}>
+                <Save size={18} aria-hidden="true" />
+                {tabaqueiraEntradaSaving ? "A registar" : "Registar"}
+              </button>
+            </form>
+          </section>
+
+          <section className="panel" id="tabaqueira-saida-panel">
+            <div className="panel-heading table-heading">
+              <div className="panel-heading-inline">
+                <div className="heading-icon">
+                  <Receipt size={20} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="eyebrow">Saída</p>
+                  <h2>{isEditingTabaqueiraSaida ? "Editar saída de tabaco" : "Registo de saída"}</h2>
+                  <span className="panel-subtitle">Regista quantos maços/unidades saíram, quem levou e para que posto.</span>
+                </div>
+              </div>
+              <button
+                className="icon-text-button"
+                type="button"
+                onClick={() => {
+                  void loadTabaqueiraData();
+                }}
+                disabled={tabaqueiraEntradaSaving || tabaqueiraSaidaSaving}
+              >
+                <RefreshCw
+                  size={18}
+                  className={tabaqueiraEntradaSaving || tabaqueiraSaidaSaving ? "spin" : ""}
+                  aria-hidden="true"
+                />
+                Atualizar
+              </button>
+            </div>
+
+            <form className="tabaqueira-saida-form" onSubmit={handleSaveTabaqueiraSaida}>
+              {isEditingTabaqueiraSaida ? (
+                <div className="edit-menu wide-field">
+                  <div>
+                    <strong>Menu de edição</strong>
+                    <span>{tabaqueiraSaidaForm.marca}</span>
+                    <small>Descreve a razão da alteração antes de guardar.</small>
+                  </div>
+                  <button className="icon-text-button" type="button" onClick={handleCancelEditTabaqueiraSaida}>
+                    <X size={18} aria-hidden="true" />
+                    Cancelar
+                  </button>
+                </div>
+              ) : null}
+
+              <label>
+                Marca
+                <select
+                  value={tabaqueiraSaidaForm.marca}
+                  onChange={(event) =>
+                    setTabaqueiraSaidaForm((current) => ({ ...current, marca: event.target.value }))
+                  }
+                  disabled={tabaqueiraSaidaSaving}
+                  required
+                >
+                  {tabaqueiraPorMarca.some((item) => item.stock > 0 || item.marca === tabaqueiraSaidaForm.marca) ? null : (
+                    <option value="">Sem stock disponível</option>
+                  )}
+                  {tabaqueiraPorMarca
+                    .filter((item) => item.stock > 0 || item.marca === tabaqueiraSaidaForm.marca)
+                    .map((item) => (
+                      <option key={item.marca} value={item.marca}>
+                        {item.marca} · {getTabaqueiraDisponivel(item.marca, tabaqueiraSaidaForm.id)} disponíveis
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Quantidade
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={tabaqueiraSaidaForm.quantidade}
+                  onChange={(event) =>
+                    setTabaqueiraSaidaForm((current) => ({ ...current, quantidade: event.target.value }))
+                  }
+                  placeholder="0"
+                  required
+                  disabled={tabaqueiraSaidaSaving}
+                />
+              </label>
+              <label>
+                Quem levou
+                <input
+                  type="text"
+                  value={tabaqueiraSaidaForm.levadoPor}
+                  onChange={(event) =>
+                    setTabaqueiraSaidaForm((current) => ({ ...current, levadoPor: event.target.value }))
+                  }
+                  placeholder="Nome"
+                  required
+                  disabled={tabaqueiraSaidaSaving}
+                />
+              </label>
+              <label>
+                Posto
+                <select
+                  value={tabaqueiraSaidaForm.postoId}
+                  onChange={(event) =>
+                    setTabaqueiraSaidaForm((current) => ({ ...current, postoId: event.target.value }))
+                  }
+                  disabled={!activePostos.length || tabaqueiraSaidaSaving}
+                  required
+                >
+                  {activePostos.length ? null : <option value="">Criar posto na Gestão</option>}
+                  {activePostos.map((posto) => (
+                    <option key={posto.id} value={posto.id}>
+                      {posto.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {isEditingTabaqueiraSaida ? (
+                <label className="wide-field">
+                  Justificação da alteração
+                  <textarea
+                    value={tabaqueiraSaidaForm.justificacao}
+                    onChange={(event) =>
+                      setTabaqueiraSaidaForm((current) => ({ ...current, justificacao: event.target.value }))
+                    }
+                    placeholder="Ex.: quantidade lançada por engano"
+                    required
+                    disabled={tabaqueiraSaidaSaving}
+                  />
+                </label>
+              ) : null}
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={tabaqueiraSaidaSaving || !activePostos.length || !tabaqueiraPorMarca.length}
+              >
+                <Save size={18} aria-hidden="true" />
+                {tabaqueiraSaidaSaving
+                  ? "A guardar"
+                  : isEditingTabaqueiraSaida
+                    ? "Guardar alteração"
+                    : "Registar saída"}
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Resumo</p>
+                <h2>Stock por marca</h2>
+              </div>
+            </div>
+
+            {tabaqueiraPorMarca.length ? (
+              <div className="table-wrap">
+                <table className="agent-table stock-table">
+                  <thead>
+                    <tr>
+                      <th>Marca</th>
+                      <th>Recebido</th>
+                      <th>Saído</th>
+                      <th>Stock</th>
+                      <th>Preço fornecedor</th>
+                      <th>PVP</th>
+                      <th>Valor fornecedor</th>
+                      <th>Valor PVP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tabaqueiraPorMarca.map((item) => (
+                      <tr key={item.marca}>
+                        <td>{item.marca}</td>
+                        <td>{item.recebido}</td>
+                        <td>{item.saido}</td>
+                        <td>
+                          <strong>{item.stock}</strong>
+                        </td>
+                        <td>{formatCurrency(item.precoFornecedor)}</td>
+                        <td>{formatCurrency(item.pvp)}</td>
+                        <td>{formatCurrency(item.valorFornecedorStock)}</td>
+                        <td>
+                          <strong>{formatCurrency(item.valorPvpStock)}</strong>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existe stock de tabaco registado.</div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Histórico</p>
+                <h2>Receções</h2>
+              </div>
+            </div>
+
+            {tabaqueiraEntradas.length ? (
+              <div className="table-wrap">
+                <table className="agent-table stock-table">
+                  <thead>
+                    <tr>
+                      <th>Dia e hora</th>
+                      <th>Marca</th>
+                      <th>Quantidade</th>
+                      <th>Preço fornecedor</th>
+                      <th>PVP</th>
+                      <th>Valor fornecedor</th>
+                      <th>Valor PVP</th>
+                      <th>Registado por</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tabaqueiraEntradas.map((entrada) => {
+                      const quantidade = Number(entrada.quantidade);
+                      const precoFornecedor = Number(entrada.preco_fornecedor);
+                      const pvp = Number(entrada.pvp);
+
+                      return (
+                        <tr key={entrada.id}>
+                          <td>{formatDateTimeLabel(entrada.created_at)}</td>
+                          <td>{entrada.marca}</td>
+                          <td>
+                            <strong>{quantidade}</strong>
+                          </td>
+                          <td>{formatCurrency(precoFornecedor)}</td>
+                          <td>{formatCurrency(pvp)}</td>
+                          <td>{formatCurrency(quantidade * precoFornecedor)}</td>
+                          <td>{formatCurrency(quantidade * pvp)}</td>
+                          <td>{entrada.criado_por_nome}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem receções da Tabaqueira.</div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Histórico</p>
+                <h2>Saídas</h2>
+              </div>
+            </div>
+
+            {tabaqueiraSaidas.length ? (
+              <div className="table-wrap">
+                <table className="agent-table stock-table">
+                  <thead>
+                    <tr>
+                      <th>Dia e hora</th>
+                      <th>Marca</th>
+                      <th>Quantidade</th>
+                      <th>Quem levou</th>
+                      <th>Posto</th>
+                      <th>Registado por</th>
+                      <th>Última alteração</th>
+                      <th>Justificação</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tabaqueiraSaidas.map((saida) => (
+                      <tr key={saida.id}>
+                        <td>{formatDateTimeLabel(saida.created_at)}</td>
+                        <td>{saida.marca}</td>
+                        <td>
+                          <strong>{saida.quantidade}</strong>
+                        </td>
+                        <td>{saida.levado_por}</td>
+                        <td>{saida.posto_nome}</td>
+                        <td>{saida.criado_por_nome}</td>
+                        <td>{saida.atualizado_por_nome ? `${saida.atualizado_por_nome} · ${formatDateTimeLabel(saida.updated_at)}` : "Sem alterações"}</td>
+                        <td>{saida.justificacao_edicao || "Sem justificação"}</td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              className="icon-button"
+                              type="button"
+                              aria-label="Editar saída"
+                              onClick={() => handleEditTabaqueiraSaida(saida)}
+                            >
+                              <Pencil size={16} aria-hidden="true" />
+                            </button>
+                            <button
+                              className="icon-button danger"
+                              type="button"
+                              aria-label="Apagar saída"
+                              onClick={() => void handleDeleteTabaqueiraSaida(saida.id)}
+                            >
+                              <Trash2 size={16} aria-hidden="true" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem saídas da Tabaqueira.</div>
             )}
           </section>
         </>
