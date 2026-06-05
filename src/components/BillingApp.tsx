@@ -138,6 +138,7 @@ type NovadisConsumoForm = {
 };
 
 type TabaqueiraEntradaForm = {
+  id: string | null;
   marca: string;
   quantidade: string;
   precoFornecedor: string;
@@ -478,6 +479,7 @@ function emptyNovadisConsumoForm(date = todayISO()): NovadisConsumoForm {
 
 function emptyTabaqueiraEntradaForm(): TabaqueiraEntradaForm {
   return {
+    id: null,
     marca: "",
     quantidade: "",
     precoFornecedor: "",
@@ -544,7 +546,10 @@ function normalizeTabaqueiraEntrada(entrada: TabaqueiraEntrada): TabaqueiraEntra
     marca: normalizeTabaqueiraMarca(entrada.marca),
     quantidade: Number(entrada.quantidade),
     preco_fornecedor: Number(entrada.preco_fornecedor ?? 0),
-    pvp: Number(entrada.pvp ?? 0)
+    pvp: Number(entrada.pvp ?? 0),
+    atualizado_por_id: entrada.atualizado_por_id ?? null,
+    atualizado_por_nome: entrada.atualizado_por_nome ?? null,
+    updated_at: entrada.updated_at ?? entrada.created_at
   };
 }
 
@@ -1254,6 +1259,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
   const isEditingRegisto = Boolean(editingRegisto);
   const isEditingDespesa = Boolean(editingDespesa);
+  const isEditingTabaqueiraEntrada = Boolean(tabaqueiraEntradaForm.id);
   const isEditingTabaqueiraSaida = Boolean(tabaqueiraSaidaForm.id);
   const agenteValoresBase =
     Number(agenteConfig.valor_eventos_anual) +
@@ -3103,6 +3109,24 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     return Math.max(recebido - saido, 0);
   }
 
+  function getTabaqueiraRecebidoAposEntrada(marca: string, ignoredEntradaId: string | null, nextQuantidade = 0) {
+    const normalizedMarca = normalizeTabaqueiraMarca(marca);
+
+    return (
+      tabaqueiraEntradas
+        .filter((entrada) => entrada.id !== ignoredEntradaId && normalizeTabaqueiraMarca(entrada.marca) === normalizedMarca)
+        .reduce((acc, entrada) => acc + Number(entrada.quantidade), 0) + nextQuantidade
+    );
+  }
+
+  function getTabaqueiraSaidoTotal(marca: string) {
+    const normalizedMarca = normalizeTabaqueiraMarca(marca);
+
+    return tabaqueiraSaidas
+      .filter((saida) => normalizeTabaqueiraMarca(saida.marca) === normalizedMarca)
+      .reduce((acc, saida) => acc + Number(saida.quantidade), 0);
+  }
+
   async function handleRegisterTabaqueiraEntrada(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -3112,9 +3136,16 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     const quantidade = Number.parseInt(tabaqueiraEntradaForm.quantidade, 10);
     const precoFornecedor = parseMoney(tabaqueiraEntradaForm.precoFornecedor);
     const pvp = parseMoney(tabaqueiraEntradaForm.pvp);
+    const editingId = tabaqueiraEntradaForm.id;
+    const existingEntrada = editingId ? tabaqueiraEntradas.find((entrada) => entrada.id === editingId) ?? null : null;
 
     if (!marca) {
       setError("Indica a marca do tabaco.");
+      return;
+    }
+
+    if (editingId && !canDeleteData) {
+      setError("Não tem privilégios para editar receções de tabaco.");
       return;
     }
 
@@ -3128,24 +3159,56 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
+    if (editingId) {
+      const recebidoAposNovaMarca = getTabaqueiraRecebidoAposEntrada(marca, editingId, quantidade);
+      const saidoNovaMarca = getTabaqueiraSaidoTotal(marca);
+
+      if (recebidoAposNovaMarca < saidoNovaMarca) {
+        setError(`Não podes reduzir ${marca}; já saíram ${saidoNovaMarca} maços/unidades dessa marca.`);
+        return;
+      }
+
+      if (existingEntrada && normalizeTabaqueiraMarca(existingEntrada.marca) !== marca) {
+        const recebidoAposMarcaAnterior = getTabaqueiraRecebidoAposEntrada(existingEntrada.marca, editingId, 0);
+        const saidoMarcaAnterior = getTabaqueiraSaidoTotal(existingEntrada.marca);
+
+        if (recebidoAposMarcaAnterior < saidoMarcaAnterior) {
+          setError(
+            `Não podes mudar esta receção; já saíram ${saidoMarcaAnterior} maços/unidades de ${existingEntrada.marca}.`
+          );
+          return;
+        }
+      }
+    }
+
     if (isDemoMode) {
       const store = readDemoStore();
+      const existingIndex = editingId ? store.tabaqueiraEntradas.findIndex((entrada) => entrada.id === editingId) : -1;
+      const existingStoreEntrada =
+        existingIndex >= 0 ? normalizeTabaqueiraEntrada(store.tabaqueiraEntradas[existingIndex]) : null;
+      const now = new Date().toISOString();
       const nextEntrada: TabaqueiraEntrada = {
-        id: makeId("tabaqueira-entrada"),
+        id: existingStoreEntrada?.id ?? makeId("tabaqueira-entrada"),
         marca,
         quantidade,
         preco_fornecedor: precoFornecedor,
         pvp,
-        criado_por_id: null,
-        criado_por_nome: currentUserName,
-        created_at: new Date().toISOString()
+        criado_por_id: existingStoreEntrada?.criado_por_id ?? null,
+        criado_por_nome: existingStoreEntrada?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: editingId ? null : existingStoreEntrada?.atualizado_por_id ?? null,
+        atualizado_por_nome: editingId ? currentUserName : existingStoreEntrada?.atualizado_por_nome ?? null,
+        created_at: existingStoreEntrada?.created_at ?? now,
+        updated_at: now
       };
-      const nextEntradas = [nextEntrada, ...(store.tabaqueiraEntradas ?? [])];
+      const nextEntradas =
+        existingIndex >= 0
+          ? store.tabaqueiraEntradas.map((entrada, index) => (index === existingIndex ? nextEntrada : entrada))
+          : [nextEntrada, ...(store.tabaqueiraEntradas ?? [])];
 
       writeDemoStore({ ...store, tabaqueiraEntradas: nextEntradas });
       setTabaqueiraEntradas(nextEntradas.map(normalizeTabaqueiraEntrada));
       setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
-      setNotice("Tabaco recebido registado.");
+      setNotice(editingId ? "Receção de tabaco alterada." : "Tabaco recebido registado.");
       return;
     }
 
@@ -3157,6 +3220,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     const { error: saveError } = await supabase.rpc("app_registar_tabaqueira_entrada", {
       p_token: sessionToken,
+      p_id: editingId,
       p_marca: marca,
       p_quantidade: quantidade,
       p_preco_fornecedor: precoFornecedor,
@@ -3171,7 +3235,89 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     }
 
     setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
-    setNotice("Tabaco recebido registado.");
+    setNotice(editingId ? "Receção de tabaco alterada." : "Tabaco recebido registado.");
+    await loadTabaqueiraData();
+  }
+
+  function handleCancelEditTabaqueiraEntrada() {
+    setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
+  }
+
+  function handleEditTabaqueiraEntrada(entrada: TabaqueiraEntrada) {
+    if (!canDeleteData) {
+      setError("Não tem privilégios para editar receções de tabaco.");
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    setTabaqueiraEntradaForm({
+      id: entrada.id,
+      marca: entrada.marca,
+      quantidade: String(entrada.quantidade),
+      precoFornecedor: String(Number(entrada.preco_fornecedor).toFixed(2)),
+      pvp: String(Number(entrada.pvp).toFixed(2))
+    });
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("tabaqueira-entrada-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  async function handleDeleteTabaqueiraEntrada(entrada: TabaqueiraEntrada) {
+    if (!canDeleteData) {
+      setError("Não tem privilégios para apagar receções de tabaco.");
+      return;
+    }
+
+    const recebidoApos = getTabaqueiraRecebidoAposEntrada(entrada.marca, entrada.id, 0);
+    const saidoTotal = getTabaqueiraSaidoTotal(entrada.marca);
+
+    if (recebidoApos < saidoTotal) {
+      setError(`Não podes apagar esta receção; já saíram ${saidoTotal} maços/unidades de ${entrada.marca}.`);
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Apagar a receção de "${entrada.marca}"?`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextEntradas = (store.tabaqueiraEntradas ?? []).filter((current) => current.id !== entrada.id);
+
+      writeDemoStore({ ...store, tabaqueiraEntradas: nextEntradas });
+      setTabaqueiraEntradas(nextEntradas.map(normalizeTabaqueiraEntrada));
+      if (tabaqueiraEntradaForm.id === entrada.id) {
+        handleCancelEditTabaqueiraEntrada();
+      }
+      setNotice("Receção de tabaco apagada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_tabaqueira_entrada", {
+      p_token: sessionToken,
+      p_id: entrada.id
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    if (tabaqueiraEntradaForm.id === entrada.id) {
+      handleCancelEditTabaqueiraEntrada();
+    }
+    setNotice("Receção de tabaco apagada.");
     await loadTabaqueiraData();
   }
 
@@ -4645,19 +4791,33 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             ))}
           </section>
 
-          <section className="panel">
+          <section className="panel" id="tabaqueira-entrada-panel">
             <div className="panel-heading">
               <div className="heading-icon">
                 <Plus size={20} aria-hidden="true" />
               </div>
               <div>
                 <p className="eyebrow">Tabaqueira</p>
-                <h2>Receção de tabaco</h2>
+                <h2>{isEditingTabaqueiraEntrada ? "Editar receção de tabaco" : "Receção de tabaco"}</h2>
                 <span className="panel-subtitle">Regista marca, quantidade recebida, preço fornecedor e PVP.</span>
               </div>
             </div>
 
             <form className="tabaqueira-entrada-form" onSubmit={handleRegisterTabaqueiraEntrada}>
+              {isEditingTabaqueiraEntrada ? (
+                <div className="edit-menu wide-field">
+                  <div>
+                    <strong>Menu de edição</strong>
+                    <span>{tabaqueiraEntradaForm.marca}</span>
+                    <small>Apenas administradores podem alterar receções de tabaco.</small>
+                  </div>
+                  <button className="icon-text-button" type="button" onClick={handleCancelEditTabaqueiraEntrada}>
+                    <X size={18} aria-hidden="true" />
+                    Cancelar
+                  </button>
+                </div>
+              ) : null}
+
               <label>
                 Marca
                 <input
@@ -4715,7 +4875,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </label>
               <button className="primary-button" type="submit" disabled={tabaqueiraEntradaSaving}>
                 <Save size={18} aria-hidden="true" />
-                {tabaqueiraEntradaSaving ? "A registar" : "Registar"}
+                {tabaqueiraEntradaSaving
+                  ? "A guardar"
+                  : isEditingTabaqueiraEntrada
+                    ? "Guardar alteração"
+                    : "Registar"}
               </button>
             </form>
           </section>
@@ -4988,6 +5152,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                       <th>Valor fornecedor</th>
                       <th>Valor PVP</th>
                       <th>Registado por</th>
+                      <th>Última alteração</th>
+                      <th>Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5008,6 +5174,31 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                           <td>{formatCurrency(quantidade * precoFornecedor)}</td>
                           <td>{formatCurrency(quantidade * pvp)}</td>
                           <td>{entrada.criado_por_nome}</td>
+                          <td>
+                            {entrada.atualizado_por_nome
+                              ? `${entrada.atualizado_por_nome} · ${formatDateTimeLabel(entrada.updated_at)}`
+                              : "Sem alterações"}
+                          </td>
+                          <td>
+                            <div className="row-actions">
+                              <button
+                                className="icon-button"
+                                type="button"
+                                aria-label="Editar receção"
+                                onClick={() => handleEditTabaqueiraEntrada(entrada)}
+                              >
+                                <Pencil size={16} aria-hidden="true" />
+                              </button>
+                              <button
+                                className="icon-button danger"
+                                type="button"
+                                aria-label="Apagar receção"
+                                onClick={() => void handleDeleteTabaqueiraEntrada(entrada)}
+                              >
+                                <Trash2 size={16} aria-hidden="true" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}

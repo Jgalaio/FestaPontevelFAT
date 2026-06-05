@@ -154,7 +154,10 @@ export type TabaqueiraEntrada = {
   pvp: number;
   criado_por_id: string | null;
   criado_por_nome: string;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type TabaqueiraSaida = {
@@ -477,7 +480,10 @@ export type Database = {
           pvp?: number;
           criado_por_id?: string | null;
           criado_por_nome: string;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<TabaqueiraEntrada>;
         Relationships: [];
@@ -729,12 +735,17 @@ export type Database = {
       app_registar_tabaqueira_entrada: {
         Args: {
           p_token: string;
+          p_id?: string | null;
           p_marca: string;
           p_quantidade: number;
           p_preco_fornecedor?: number;
           p_pvp?: number;
         };
         Returns: TabaqueiraEntrada[];
+      };
+      app_apagar_tabaqueira_entrada: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
       };
       app_listar_tabaqueira_saidas: {
         Args: { p_token: string };

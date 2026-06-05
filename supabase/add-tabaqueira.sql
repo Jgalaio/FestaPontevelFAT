@@ -6,7 +6,10 @@ create table if not exists public.tabaqueira_entradas (
   pvp numeric not null default 0 check (pvp >= 0),
   criado_por_id uuid references public.utilizadores(id) on delete set null,
   criado_por_nome text not null,
-  created_at timestamptz not null default now()
+  atualizado_por_id uuid references public.utilizadores(id) on delete set null,
+  atualizado_por_nome text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.tabaqueira_saidas (
@@ -33,7 +36,10 @@ alter table public.tabaqueira_entradas
   add column if not exists pvp numeric not null default 0,
   add column if not exists criado_por_id uuid references public.utilizadores(id) on delete set null,
   add column if not exists criado_por_nome text not null default 'Sistema',
-  add column if not exists created_at timestamptz not null default now();
+  add column if not exists atualizado_por_id uuid references public.utilizadores(id) on delete set null,
+  add column if not exists atualizado_por_nome text,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
 
 alter table public.tabaqueira_saidas
   add column if not exists data date,
@@ -125,6 +131,7 @@ create index if not exists idx_tabaqueira_saidas_posto
 alter table public.tabaqueira_entradas enable row level security;
 alter table public.tabaqueira_saidas enable row level security;
 
+drop function if exists public.app_registar_tabaqueira_entrada(text, text, integer, numeric, numeric);
 drop function if exists public.app_guardar_tabaqueira_saida(text, uuid, text, integer, text, uuid, text);
 
 create or replace function public.app_listar_tabaqueira_entradas(p_token text)
@@ -147,8 +154,9 @@ $$;
 
 create or replace function public.app_registar_tabaqueira_entrada(
   p_token text,
-  p_marca text,
-  p_quantidade integer,
+  p_id uuid default null,
+  p_marca text default '',
+  p_quantidade integer default 0,
   p_preco_fornecedor numeric default 0,
   p_pvp numeric default 0
 )
@@ -159,8 +167,11 @@ set search_path = public, extensions
 as $$
 declare
   actor record;
+  existing_entrada public.tabaqueira_entradas%rowtype;
   saved_id uuid;
   normalized_marca text;
+  total_recebido integer;
+  total_saido integer;
 begin
   select * into actor from public.app_require_actor(p_token) limit 1;
 
@@ -178,28 +189,138 @@ begin
     raise exception 'Os preços da Tabaqueira não podem ser negativos' using errcode = '22023';
   end if;
 
-  insert into public.tabaqueira_entradas (
-    marca,
-    quantidade,
-    preco_fornecedor,
-    pvp,
-    criado_por_id,
-    criado_por_nome
-  )
-  values (
-    normalized_marca,
-    p_quantidade,
-    coalesce(p_preco_fornecedor, 0),
-    coalesce(p_pvp, 0),
-    actor.utilizador_id,
-    actor.nome
-  )
-  returning id into saved_id;
+  if p_id is not null then
+    if actor.role <> 'admin' then
+      raise exception 'Não tem privilégios para editar receções de tabaco' using errcode = '42501';
+    end if;
+
+    select *
+    into existing_entrada
+    from public.tabaqueira_entradas
+    where id = p_id
+    limit 1;
+
+    if existing_entrada.id is null then
+      raise exception 'Receção de tabaco não encontrada' using errcode = '02000';
+    end if;
+
+    select coalesce(sum(quantidade), 0) + p_quantidade
+    into total_recebido
+    from public.tabaqueira_entradas
+    where marca = normalized_marca
+      and id <> p_id;
+
+    select coalesce(sum(quantidade), 0)
+    into total_saido
+    from public.tabaqueira_saidas
+    where marca = normalized_marca;
+
+    if total_recebido < total_saido then
+      raise exception 'Não podes reduzir esta receção abaixo do que já saiu dessa marca' using errcode = '22023';
+    end if;
+
+    if existing_entrada.marca <> normalized_marca then
+      select coalesce(sum(quantidade), 0)
+      into total_recebido
+      from public.tabaqueira_entradas
+      where marca = existing_entrada.marca
+        and id <> p_id;
+
+      select coalesce(sum(quantidade), 0)
+      into total_saido
+      from public.tabaqueira_saidas
+      where marca = existing_entrada.marca;
+
+      if total_recebido < total_saido then
+        raise exception 'Não podes mudar esta receção; já existem saídas da marca anterior' using errcode = '22023';
+      end if;
+    end if;
+
+    update public.tabaqueira_entradas
+    set marca = normalized_marca,
+        quantidade = p_quantidade,
+        preco_fornecedor = coalesce(p_preco_fornecedor, 0),
+        pvp = coalesce(p_pvp, 0),
+        atualizado_por_id = actor.utilizador_id,
+        atualizado_por_nome = actor.nome,
+        updated_at = now()
+    where id = p_id
+    returning id into saved_id;
+  else
+    insert into public.tabaqueira_entradas (
+      marca,
+      quantidade,
+      preco_fornecedor,
+      pvp,
+      criado_por_id,
+      criado_por_nome
+    )
+    values (
+      normalized_marca,
+      p_quantidade,
+      coalesce(p_preco_fornecedor, 0),
+      coalesce(p_pvp, 0),
+      actor.utilizador_id,
+      actor.nome
+    )
+    returning id into saved_id;
+  end if;
 
   return query
   select *
   from public.tabaqueira_entradas
   where id = saved_id;
+end;
+$$;
+
+create or replace function public.app_apagar_tabaqueira_entrada(
+  p_token text,
+  p_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  actor record;
+  existing_entrada public.tabaqueira_entradas%rowtype;
+  total_recebido integer;
+  total_saido integer;
+begin
+  select * into actor from public.app_require_actor(p_token) limit 1;
+
+  if actor.role <> 'admin' then
+    raise exception 'Não tem privilégios para apagar receções de tabaco' using errcode = '42501';
+  end if;
+
+  select *
+  into existing_entrada
+  from public.tabaqueira_entradas
+  where id = p_id
+  limit 1;
+
+  if existing_entrada.id is null then
+    return;
+  end if;
+
+  select coalesce(sum(quantidade), 0)
+  into total_recebido
+  from public.tabaqueira_entradas
+  where marca = existing_entrada.marca
+    and id <> p_id;
+
+  select coalesce(sum(quantidade), 0)
+  into total_saido
+  from public.tabaqueira_saidas
+  where marca = existing_entrada.marca;
+
+  if total_recebido < total_saido then
+    raise exception 'Não podes apagar esta receção; já existem saídas dessa marca' using errcode = '22023';
+  end if;
+
+  delete from public.tabaqueira_entradas
+  where id = p_id;
 end;
 $$;
 

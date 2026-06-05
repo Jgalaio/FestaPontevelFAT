@@ -65,7 +65,7 @@ Essa atualização cria:
 - `agente_config` e `pagamentos_agente`, com valor necessário, valores-base e entregas ao agente
 - proteção para apagar faturação/despesas apenas com papel `admin`
 - `novadis_config`, `novadis_barris` e `novadis_consumos`, com valor unitário/tara por tipo, histórico recebido e gasto diário
-- `tabaqueira_entradas` e `tabaqueira_saidas`, com stock recebido, preço fornecedor, PVP, saídas por dia/posto e edição justificada
+- `tabaqueira_entradas` e `tabaqueira_saidas`, com stock recebido, preço fornecedor, PVP, saídas por dia/posto e correções de admin
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
 - funções RPC para login, faturação, despesas, pagamentos, dias, postos, stocks e gestão de utilizadores
@@ -116,7 +116,7 @@ Cada posto só pode ter um registo por dia; guardar de novo atualiza o valor des
 
 Os valores da Novadis são apresentados em `Stocks > Novadis` e não entram nos totais da festa. Na consignação, as unidades cheias a devolver contam pelo valor unitário e as unidades gastas/vazias contam pelo valor da tara. O resumo de consignação permite editar o total gasto por produto para corrigir enganos de lançamento.
 
-A Tabaqueira fica em `Stocks > Tabaqueira`. Permite registar receções por marca, quantidade, preço fornecedor e PVP, e controlar saídas por dia da festa, marca, pessoa que levou e posto de destino. Saídas podem ser editadas com justificação; apenas utilizadores `admin` podem apagar saídas.
+A Tabaqueira fica em `Stocks > Tabaqueira`. Permite registar receções por marca, quantidade, preço fornecedor e PVP, e controlar saídas por dia da festa, marca, pessoa que levou e posto de destino. Apenas utilizadores `admin` podem corrigir ou apagar receções; saídas podem ser editadas com justificação e apagadas por `admin`.
 
 ## Próximos passos recomendados
 
