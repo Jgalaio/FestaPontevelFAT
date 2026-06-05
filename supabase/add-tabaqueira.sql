@@ -11,6 +11,7 @@ create table if not exists public.tabaqueira_entradas (
 
 create table if not exists public.tabaqueira_saidas (
   id uuid primary key default gen_random_uuid(),
+  data date not null references public.dias_festa(data) on delete restrict,
   marca text not null,
   quantidade integer not null check (quantidade > 0),
   levado_por text not null,
@@ -35,6 +36,7 @@ alter table public.tabaqueira_entradas
   add column if not exists created_at timestamptz not null default now();
 
 alter table public.tabaqueira_saidas
+  add column if not exists data date,
   add column if not exists marca text not null default '',
   add column if not exists quantidade integer not null default 1,
   add column if not exists levado_por text not null default '',
@@ -83,6 +85,16 @@ begin
   if not exists (
     select 1
     from pg_constraint
+    where conname = 'tabaqueira_saidas_data_fkey'
+      and conrelid = 'public.tabaqueira_saidas'::regclass
+  ) then
+    alter table public.tabaqueira_saidas
+      add constraint tabaqueira_saidas_data_fkey foreign key (data) references public.dias_festa(data) on delete restrict;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
     where conname = 'tabaqueira_saidas_quantidade_check'
       and conrelid = 'public.tabaqueira_saidas'::regclass
   ) then
@@ -101,6 +113,9 @@ create index if not exists idx_tabaqueira_entradas_marca
 create index if not exists idx_tabaqueira_saidas_created
   on public.tabaqueira_saidas (created_at desc);
 
+create index if not exists idx_tabaqueira_saidas_data
+  on public.tabaqueira_saidas (data desc);
+
 create index if not exists idx_tabaqueira_saidas_marca
   on public.tabaqueira_saidas (marca);
 
@@ -109,6 +124,8 @@ create index if not exists idx_tabaqueira_saidas_posto
 
 alter table public.tabaqueira_entradas enable row level security;
 alter table public.tabaqueira_saidas enable row level security;
+
+drop function if exists public.app_guardar_tabaqueira_saida(text, uuid, text, integer, text, uuid, text);
 
 create or replace function public.app_listar_tabaqueira_entradas(p_token text)
 returns setof public.tabaqueira_entradas
@@ -200,13 +217,14 @@ begin
   return query
   select *
   from public.tabaqueira_saidas
-  order by created_at desc;
+  order by data desc nulls last, created_at desc;
 end;
 $$;
 
 create or replace function public.app_guardar_tabaqueira_saida(
   p_token text,
   p_id uuid default null,
+  p_data date default null,
   p_marca text default '',
   p_quantidade integer default 0,
   p_levado_por text default '',
@@ -230,6 +248,12 @@ declare
   saved_id uuid;
 begin
   select * into actor from public.app_require_actor(p_token) limit 1;
+
+  if p_data is null then
+    raise exception 'Escolhe o dia da festa em que saiu o tabaco' using errcode = '22023';
+  end if;
+
+  perform public.app_require_dia_aberto(p_data);
 
   normalized_marca := regexp_replace(trim(coalesce(p_marca, '')), '[[:space:]]+', ' ', 'g');
   normalized_levado_por := regexp_replace(trim(coalesce(p_levado_por, '')), '[[:space:]]+', ' ', 'g');
@@ -290,6 +314,7 @@ begin
 
   if p_id is null then
     insert into public.tabaqueira_saidas (
+      data,
       marca,
       quantidade,
       levado_por,
@@ -299,6 +324,7 @@ begin
       criado_por_nome
     )
     values (
+      p_data,
       normalized_marca,
       p_quantidade,
       normalized_levado_por,
@@ -310,7 +336,8 @@ begin
     returning id into saved_id;
   else
     update public.tabaqueira_saidas
-    set marca = normalized_marca,
+    set data = p_data,
+        marca = normalized_marca,
         quantidade = p_quantidade,
         levado_por = normalized_levado_por,
         posto_id = p_posto_id,

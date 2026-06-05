@@ -146,6 +146,7 @@ type TabaqueiraEntradaForm = {
 
 type TabaqueiraSaidaForm = {
   id: string | null;
+  data: string;
   marca: string;
   quantidade: string;
   levadoPor: string;
@@ -484,9 +485,10 @@ function emptyTabaqueiraEntradaForm(): TabaqueiraEntradaForm {
   };
 }
 
-function emptyTabaqueiraSaidaForm(): TabaqueiraSaidaForm {
+function emptyTabaqueiraSaidaForm(date = todayISO()): TabaqueiraSaidaForm {
   return {
     id: null,
+    data: date,
     marca: "",
     quantidade: "",
     levadoPor: "",
@@ -549,6 +551,7 @@ function normalizeTabaqueiraEntrada(entrada: TabaqueiraEntrada): TabaqueiraEntra
 function normalizeTabaqueiraSaida(saida: TabaqueiraSaida): TabaqueiraSaida {
   return {
     ...saida,
+    data: saida.data ?? null,
     marca: normalizeTabaqueiraMarca(saida.marca),
     quantidade: Number(saida.quantidade),
     posto_id: saida.posto_id ?? null,
@@ -964,7 +967,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     emptyTabaqueiraEntradaForm()
   );
   const [tabaqueiraSaidaForm, setTabaqueiraSaidaForm] = useState<TabaqueiraSaidaForm>(() =>
-    emptyTabaqueiraSaidaForm()
+    emptyTabaqueiraSaidaForm(startDate)
   );
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
@@ -1334,6 +1337,23 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const tabaqueiraTotalStock = tabaqueiraPorMarca.reduce((acc, item) => acc + item.stock, 0);
   const tabaqueiraValorFornecedorStock = tabaqueiraPorMarca.reduce((acc, item) => acc + item.valorFornecedorStock, 0);
   const tabaqueiraValorPvpStock = tabaqueiraPorMarca.reduce((acc, item) => acc + item.valorPvpStock, 0);
+  const tabaqueiraSaidasPorDia = useMemo(
+    () =>
+      orderedDiasFesta
+        .map((dia) => {
+          const saidasDia = tabaqueiraSaidas.filter((saida) => saida.data === dia.data);
+          const quantidade = saidasDia.reduce((acc, saida) => acc + Number(saida.quantidade), 0);
+          const marcas = Array.from(new Set(saidasDia.map((saida) => saida.marca))).filter(Boolean).sort();
+
+          return {
+            dia,
+            quantidade,
+            marcas
+          };
+        })
+        .filter((item) => item.quantidade > 0),
+    [orderedDiasFesta, tabaqueiraSaidas]
+  );
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -1725,6 +1745,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setForm((current) => ({ ...current, data: selectedDate }));
     setDespesaForm((current) => ({ ...current, data: selectedDate }));
     setNovadisConsumoForm((current) => ({ ...current, data: selectedDate }));
+    setTabaqueiraSaidaForm((current) => (current.id ? current : { ...current, data: selectedDate }));
   }, [selectedDate]);
 
   useEffect(() => {
@@ -1850,7 +1871,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setTabaqueiraEntradas([]);
     setTabaqueiraSaidas([]);
     setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
-    setTabaqueiraSaidaForm(emptyTabaqueiraSaidaForm());
+    setTabaqueiraSaidaForm(emptyTabaqueiraSaidaForm(startDate));
   }
 
   function handleSelectDia(value: string) {
@@ -3156,7 +3177,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
   function handleCancelEditTabaqueiraSaida() {
     setTabaqueiraSaidaForm((current) => ({
-      ...emptyTabaqueiraSaidaForm(),
+      ...emptyTabaqueiraSaidaForm(current.data || selectedDia?.data || selectedDate),
       marca: tabaqueiraPorMarca.find((item) => item.stock > 0)?.marca ?? "",
       postoId: current.postoId || activePostos[0]?.id || ""
     }));
@@ -3170,9 +3191,20 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     const marca = normalizeTabaqueiraMarca(tabaqueiraSaidaForm.marca);
     const quantidade = Number.parseInt(tabaqueiraSaidaForm.quantidade, 10);
     const levadoPor = tabaqueiraSaidaForm.levadoPor.trim();
+    const saidaDia = orderedDiasFesta.find((dia) => dia.data === tabaqueiraSaidaForm.data) ?? null;
     const posto = postos.find((current) => current.id === tabaqueiraSaidaForm.postoId) ?? null;
     const justificacao = tabaqueiraSaidaForm.justificacao.trim();
     const editingId = tabaqueiraSaidaForm.id;
+
+    if (!saidaDia) {
+      setError("Escolhe o dia da festa em que saiu o tabaco.");
+      return;
+    }
+
+    if (saidaDia.fechado) {
+      setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
 
     if (!marca) {
       setError("Escolhe a marca do tabaco para a saída.");
@@ -3213,6 +3245,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       const now = new Date().toISOString();
       const nextSaida: TabaqueiraSaida = {
         id: existingSaida?.id ?? makeId("tabaqueira-saida"),
+        data: saidaDia.data,
         marca,
         quantidade,
         levado_por: levadoPor,
@@ -3247,6 +3280,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     const { error: saveError } = await supabase.rpc("app_guardar_tabaqueira_saida", {
       p_token: sessionToken,
       p_id: editingId,
+      p_data: saidaDia.data,
       p_marca: marca,
       p_quantidade: quantidade,
       p_levado_por: levadoPor,
@@ -3271,6 +3305,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setNotice("");
     setTabaqueiraSaidaForm({
       id: saida.id,
+      data: saida.data ?? selectedDia?.data ?? selectedDate,
       marca: saida.marca,
       quantidade: String(saida.quantidade),
       levadoPor: saida.levado_por,
@@ -4721,6 +4756,24 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               ) : null}
 
               <label>
+                Dia da festa
+                <select
+                  value={orderedDiasFesta.length ? tabaqueiraSaidaForm.data : ""}
+                  onChange={(event) =>
+                    setTabaqueiraSaidaForm((current) => ({ ...current, data: event.target.value }))
+                  }
+                  disabled={!orderedDiasFesta.length || tabaqueiraSaidaSaving}
+                  required
+                >
+                  {orderedDiasFesta.length ? null : <option value="">Criar dia na Gestão</option>}
+                  {orderedDiasFesta.map((dia) => (
+                    <option key={dia.id} value={dia.data}>
+                      {dia.nome} · {formatDateLabel(dia.data)} {dia.fechado ? "· fechado" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 Marca
                 <select
                   value={tabaqueiraSaidaForm.marca}
@@ -4806,7 +4859,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <button
                 className="primary-button"
                 type="submit"
-                disabled={tabaqueiraSaidaSaving || !activePostos.length || !tabaqueiraPorMarca.length}
+                disabled={tabaqueiraSaidaSaving || !orderedDiasFesta.length || !activePostos.length || !tabaqueiraPorMarca.length}
               >
                 <Save size={18} aria-hidden="true" />
                 {tabaqueiraSaidaSaving
@@ -4816,6 +4869,45 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     : "Registar saída"}
               </button>
             </form>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Resumo</p>
+                <h2>Saídas por dia</h2>
+              </div>
+            </div>
+
+            {tabaqueiraSaidasPorDia.length ? (
+              <div className="table-wrap">
+                <table className="agent-table stock-table">
+                  <thead>
+                    <tr>
+                      <th>Dia da festa</th>
+                      <th>Quantidade saída</th>
+                      <th>Marcas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tabaqueiraSaidasPorDia.map((item) => (
+                      <tr key={item.dia.id}>
+                        <td>
+                          <strong>{item.dia.nome}</strong>
+                          <span>{formatDateLabel(item.dia.data)}</span>
+                        </td>
+                        <td>
+                          <strong>{item.quantidade}</strong>
+                        </td>
+                        <td>{item.marcas.join(", ") || "Sem marcas"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem saídas por dia da festa.</div>
+            )}
           </section>
 
           <section className="panel">
@@ -4931,7 +5023,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 <table className="agent-table stock-table">
                   <thead>
                     <tr>
-                      <th>Dia e hora</th>
+                      <th>Dia da festa</th>
+                      <th>Registado em</th>
                       <th>Marca</th>
                       <th>Quantidade</th>
                       <th>Quem levou</th>
@@ -4945,6 +5038,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   <tbody>
                     {tabaqueiraSaidas.map((saida) => (
                       <tr key={saida.id}>
+                        <td>{saida.data ? formatDateLabel(saida.data) : "Sem dia"}</td>
                         <td>{formatDateTimeLabel(saida.created_at)}</td>
                         <td>{saida.marca}</td>
                         <td>

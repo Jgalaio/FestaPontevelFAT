@@ -159,6 +159,7 @@ export type TabaqueiraEntrada = {
 
 export type TabaqueiraSaida = {
   id: string;
+  data: string | null;
   marca: string;
   quantidade: number;
   levado_por: string;
@@ -485,6 +486,7 @@ export type Database = {
         Row: TabaqueiraSaida;
         Insert: {
           id?: string;
+          data: string;
           marca: string;
           quantidade: number;
           levado_por: string;
@@ -742,6 +744,7 @@ export type Database = {
         Args: {
           p_token: string;
           p_id?: string | null;
+          p_data: string;
           p_marca: string;
           p_quantidade: number;
           p_levado_por: string;
