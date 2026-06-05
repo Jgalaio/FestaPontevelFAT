@@ -177,6 +177,34 @@ export type TabaqueiraSaida = {
   updated_at: string;
 };
 
+export type InventarioTipoProduto = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  criado_por_id: string | null;
+  criado_por_nome: string | null;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InventarioProduto = {
+  id: string;
+  produto: string;
+  tipo_id: string | null;
+  tipo_nome: string;
+  quantidade_recebida: number;
+  quantidade_retirada: number;
+  responsavel: string;
+  criado_por_id: string | null;
+  criado_por_nome: string;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuditoriaRegisto = {
   id: string;
   registo_id: string | null;
@@ -516,6 +544,49 @@ export type Database = {
           }
         ];
       };
+      inventario_tipos_produto: {
+        Row: InventarioTipoProduto;
+        Insert: {
+          id?: string;
+          nome: string;
+          ativo?: boolean;
+          criado_por_id?: string | null;
+          criado_por_nome?: string | null;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<InventarioTipoProduto>;
+        Relationships: [];
+      };
+      inventario_produtos: {
+        Row: InventarioProduto;
+        Insert: {
+          id?: string;
+          produto: string;
+          tipo_id?: string | null;
+          tipo_nome?: string;
+          quantidade_recebida?: number;
+          quantidade_retirada?: number;
+          responsavel: string;
+          criado_por_id?: string | null;
+          criado_por_nome: string;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<InventarioProduto>;
+        Relationships: [
+          {
+            foreignKeyName: "inventario_produtos_tipo_id_fkey";
+            columns: ["tipo_id"];
+            referencedRelation: "inventario_tipos_produto";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       registos_faturacao_auditoria: {
         Row: AuditoriaRegisto;
         Insert: {
@@ -765,6 +836,43 @@ export type Database = {
         Returns: TabaqueiraSaida[];
       };
       app_apagar_tabaqueira_saida: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
+      };
+      app_listar_inventario_tipos: {
+        Args: { p_token: string };
+        Returns: InventarioTipoProduto[];
+      };
+      app_guardar_inventario_tipo: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_nome: string;
+          p_ativo?: boolean;
+        };
+        Returns: InventarioTipoProduto[];
+      };
+      app_apagar_inventario_tipo: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
+      };
+      app_listar_inventario_produtos: {
+        Args: { p_token: string };
+        Returns: InventarioProduto[];
+      };
+      app_guardar_inventario_produto: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_produto: string;
+          p_tipo_id?: string | null;
+          p_quantidade_recebida?: number;
+          p_quantidade_retirada?: number;
+          p_responsavel: string;
+        };
+        Returns: InventarioProduto[];
+      };
+      app_apagar_inventario_produto: {
         Args: { p_token: string; p_id: string };
         Returns: null;
       };

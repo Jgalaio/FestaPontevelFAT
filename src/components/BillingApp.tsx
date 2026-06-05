@@ -36,6 +36,8 @@ import type {
   DespesaRow,
   DespesaRpc,
   DiaFesta,
+  InventarioProduto,
+  InventarioTipoProduto,
   Posto,
   Registo,
   RegistoForm,
@@ -65,11 +67,13 @@ type DemoStore = {
   novadisConsumos: NovadisConsumo[];
   tabaqueiraEntradas: TabaqueiraEntrada[];
   tabaqueiraSaidas: TabaqueiraSaida[];
+  inventarioTipos: InventarioTipoProduto[];
+  inventarioProdutos: InventarioProduto[];
 };
 
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "agente" | "dias" | "postos" | "tipos" | "utilizadores";
-type StockTab = "novadis" | "tabaqueira";
+type StockTab = "novadis" | "tabaqueira" | "inventario";
 type BillingAppMode = "agent" | "novadis" | "stocks" | "overview" | "register" | "management" | "reports";
 type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
@@ -155,6 +159,21 @@ type TabaqueiraSaidaForm = {
   justificacao: string;
 };
 
+type InventarioProdutoForm = {
+  id: string | null;
+  produto: string;
+  tipoId: string;
+  quantidadeRecebida: string;
+  quantidadeRetirada: string;
+  responsavel: string;
+};
+
+type InventarioTipoForm = {
+  id: string | null;
+  nome: string;
+  ativo: boolean;
+};
+
 type NovadisValorKey =
   | "imperial_valor_unitario"
   | "cidra_valor_unitario"
@@ -225,6 +244,18 @@ const NOVADIS_TIPOS: {
 
 const baseTiposDespesa: TipoDespesa[] = EXPENSE_TYPES.map((nome, index) => ({
   id: `demo-tipo-despesa-${index + 1}`,
+  nome,
+  ativo: true,
+  criado_por_id: null,
+  criado_por_nome: "Sistema",
+  atualizado_por_id: null,
+  atualizado_por_nome: "Sistema",
+  created_at: "2026-06-03T00:00:00.000Z",
+  updated_at: "2026-06-03T00:00:00.000Z"
+}));
+
+const baseInventarioTipos: InventarioTipoProduto[] = ["Bebidas", "Comida", "Material", "Outros"].map((nome, index) => ({
+  id: `demo-inventario-tipo-${index + 1}`,
   nome,
   ativo: true,
   criado_por_id: null,
@@ -499,7 +530,30 @@ function emptyTabaqueiraSaidaForm(date = todayISO()): TabaqueiraSaidaForm {
   };
 }
 
+function emptyInventarioProdutoForm(): InventarioProdutoForm {
+  return {
+    id: null,
+    produto: "",
+    tipoId: "",
+    quantidadeRecebida: "",
+    quantidadeRetirada: "",
+    responsavel: ""
+  };
+}
+
+function emptyInventarioTipoForm(): InventarioTipoForm {
+  return {
+    id: null,
+    nome: "",
+    ativo: true
+  };
+}
+
 function normalizeTabaqueiraMarca(value: string | null | undefined) {
+  return (value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function normalizeInventoryText(value: string | null | undefined) {
   return (value ?? "").trim().replace(/\s+/g, " ");
 }
 
@@ -564,6 +618,39 @@ function normalizeTabaqueiraSaida(saida: TabaqueiraSaida): TabaqueiraSaida {
     justificacao_edicao: saida.justificacao_edicao ?? null,
     atualizado_por_id: saida.atualizado_por_id ?? null,
     atualizado_por_nome: saida.atualizado_por_nome ?? null
+  };
+}
+
+function normalizeInventarioTipo(tipo: InventarioTipoProduto): InventarioTipoProduto {
+  return {
+    ...tipo,
+    nome: normalizeInventoryText(tipo.nome),
+    ativo: Boolean(tipo.ativo),
+    criado_por_id: tipo.criado_por_id ?? null,
+    criado_por_nome: tipo.criado_por_nome ?? "Sistema",
+    atualizado_por_id: tipo.atualizado_por_id ?? null,
+    atualizado_por_nome: tipo.atualizado_por_nome ?? null,
+    updated_at: tipo.updated_at ?? tipo.created_at
+  };
+}
+
+function normalizeInventarioProduto(produto: InventarioProduto): InventarioProduto {
+  const quantidadeRecebida = Number(produto.quantidade_recebida ?? 0);
+  const quantidadeRetirada = Number(produto.quantidade_retirada ?? 0);
+
+  return {
+    ...produto,
+    produto: normalizeInventoryText(produto.produto),
+    tipo_id: produto.tipo_id ?? null,
+    tipo_nome: normalizeInventoryText(produto.tipo_nome) || "Sem tipo",
+    quantidade_recebida: quantidadeRecebida,
+    quantidade_retirada: quantidadeRetirada,
+    responsavel: normalizeInventoryText(produto.responsavel),
+    criado_por_id: produto.criado_por_id ?? null,
+    criado_por_nome: produto.criado_por_nome ?? "Sistema",
+    atualizado_por_id: produto.atualizado_por_id ?? null,
+    atualizado_por_nome: produto.atualizado_por_nome ?? null,
+    updated_at: produto.updated_at ?? produto.created_at
   };
 }
 
@@ -722,6 +809,12 @@ function formatDespesaNumber(sequence: number) {
   return `D-${String(sequence).padStart(3, "0")}`;
 }
 
+function formatQuantity(value: number) {
+  return new Intl.NumberFormat("pt-PT", {
+    maximumFractionDigits: 2
+  }).format(Number(value));
+}
+
 function getDespesaSequence(numeroDespesa: string) {
   const match = numeroDespesa.match(/^D-(\d+)$/i);
 
@@ -755,6 +848,8 @@ function readDemoStore(): DemoStore {
       novadisConsumos: [],
       tabaqueiraEntradas: [],
       tabaqueiraSaidas: [],
+      inventarioTipos: baseInventarioTipos,
+      inventarioProdutos: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -774,6 +869,8 @@ function readDemoStore(): DemoStore {
       novadisConsumos: [],
       tabaqueiraEntradas: [],
       tabaqueiraSaidas: [],
+      inventarioTipos: baseInventarioTipos,
+      inventarioProdutos: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -796,6 +893,10 @@ function readDemoStore(): DemoStore {
       novadisConsumos: (parsed.novadisConsumos ?? []).map(normalizeNovadisConsumo),
       tabaqueiraEntradas: (parsed.tabaqueiraEntradas ?? []).map(normalizeTabaqueiraEntrada),
       tabaqueiraSaidas: (parsed.tabaqueiraSaidas ?? []).map(normalizeTabaqueiraSaida),
+      inventarioTipos: parsed.inventarioTipos?.length
+        ? parsed.inventarioTipos.map(normalizeInventarioTipo)
+        : baseInventarioTipos,
+      inventarioProdutos: (parsed.inventarioProdutos ?? []).map(normalizeInventarioProduto),
       tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
@@ -811,6 +912,8 @@ function readDemoStore(): DemoStore {
       novadisConsumos: [],
       tabaqueiraEntradas: [],
       tabaqueiraSaidas: [],
+      inventarioTipos: baseInventarioTipos,
+      inventarioProdutos: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -955,6 +1058,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [novadisConsumos, setNovadisConsumos] = useState<NovadisConsumo[]>([]);
   const [tabaqueiraEntradas, setTabaqueiraEntradas] = useState<TabaqueiraEntrada[]>([]);
   const [tabaqueiraSaidas, setTabaqueiraSaidas] = useState<TabaqueiraSaida[]>([]);
+  const [inventarioTipos, setInventarioTipos] = useState<InventarioTipoProduto[]>(baseInventarioTipos);
+  const [inventarioProdutos, setInventarioProdutos] = useState<InventarioProduto[]>([]);
   const [agenteConfigForm, setAgenteConfigForm] = useState<AgenteConfigForm>(() =>
     agenteConfigToForm(baseAgenteConfig)
   );
@@ -974,6 +1079,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [tabaqueiraSaidaForm, setTabaqueiraSaidaForm] = useState<TabaqueiraSaidaForm>(() =>
     emptyTabaqueiraSaidaForm(startDate)
   );
+  const [inventarioProdutoForm, setInventarioProdutoForm] = useState<InventarioProdutoForm>(() =>
+    emptyInventarioProdutoForm()
+  );
+  const [inventarioTipoForm, setInventarioTipoForm] = useState<InventarioTipoForm>(() => emptyInventarioTipoForm());
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
   const [tipoDespesaForm, setTipoDespesaForm] = useState<TipoDespesaForm>(() => emptyTipoDespesaForm());
@@ -995,12 +1104,15 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [novadisConsumoSaving, setNovadisConsumoSaving] = useState(false);
   const [tabaqueiraEntradaSaving, setTabaqueiraEntradaSaving] = useState(false);
   const [tabaqueiraSaidaSaving, setTabaqueiraSaidaSaving] = useState(false);
+  const [inventarioProdutoSaving, setInventarioProdutoSaving] = useState(false);
+  const [inventarioTipoSaving, setInventarioTipoSaving] = useState(false);
   const [overviewOnlyFestaTotal, setOverviewOnlyFestaTotal] = useState(false);
   const [overviewOnlyFestaSaldo, setOverviewOnlyFestaSaldo] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const isNovadisMode = isStocksMode && stockTab === "novadis";
   const isTabaqueiraMode = isStocksMode && stockTab === "tabaqueira";
+  const isInventarioMode = isStocksMode && stockTab === "inventario";
 
   const activePostos = useMemo(
     () => postos.filter((posto) => posto.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
@@ -1261,6 +1373,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const isEditingDespesa = Boolean(editingDespesa);
   const isEditingTabaqueiraEntrada = Boolean(tabaqueiraEntradaForm.id);
   const isEditingTabaqueiraSaida = Boolean(tabaqueiraSaidaForm.id);
+  const isEditingInventarioProduto = Boolean(inventarioProdutoForm.id);
+  const isEditingInventarioTipo = Boolean(inventarioTipoForm.id);
   const agenteValoresBase =
     Number(agenteConfig.valor_eventos_anual) +
     Number(agenteConfig.valor_patrocinios) +
@@ -1360,6 +1474,43 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         .filter((item) => item.quantidade > 0),
     [orderedDiasFesta, tabaqueiraSaidas]
   );
+  const activeInventarioTipos = useMemo(
+    () => inventarioTipos.filter((tipo) => tipo.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
+    [inventarioTipos]
+  );
+  const inventarioPorTipo = useMemo(() => {
+    const tipoNomes = Array.from(
+      new Set([
+        ...inventarioTipos.map((tipo) => tipo.nome),
+        ...inventarioProdutos.map((produto) => produto.tipo_nome || "Sem tipo")
+      ])
+    )
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    return tipoNomes.map((tipoNome) => {
+      const produtosTipo = inventarioProdutos.filter((produto) => (produto.tipo_nome || "Sem tipo") === tipoNome);
+      const recebido = produtosTipo.reduce((acc, produto) => acc + Number(produto.quantidade_recebida), 0);
+      const retirado = produtosTipo.reduce((acc, produto) => acc + Number(produto.quantidade_retirada), 0);
+
+      return {
+        tipoNome,
+        produtos: produtosTipo.length,
+        recebido,
+        retirado,
+        disponivel: Math.max(recebido - retirado, 0)
+      };
+    });
+  }, [inventarioProdutos, inventarioTipos]);
+  const inventarioTotalRecebido = inventarioProdutos.reduce(
+    (acc, produto) => acc + Number(produto.quantidade_recebida),
+    0
+  );
+  const inventarioTotalRetirado = inventarioProdutos.reduce(
+    (acc, produto) => acc + Number(produto.quantidade_retirada),
+    0
+  );
+  const inventarioTotalDisponivel = Math.max(inventarioTotalRecebido - inventarioTotalRetirado, 0);
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -1534,6 +1685,40 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setTabaqueiraEntradas((entradasResult.data ?? []).map(normalizeTabaqueiraEntrada));
     setTabaqueiraSaidas((saidasResult.data ?? []).map(normalizeTabaqueiraSaida));
+  }, [isDemoMode, sessionToken, supabase]);
+
+  const loadInventarioData = useCallback(async () => {
+    if (isDemoMode) {
+      const store = readDemoStore();
+
+      setInventarioTipos((store.inventarioTipos ?? baseInventarioTipos).map(normalizeInventarioTipo));
+      setInventarioProdutos((store.inventarioProdutos ?? []).map(normalizeInventarioProduto));
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setInventarioTipos(baseInventarioTipos);
+      setInventarioProdutos([]);
+      return;
+    }
+
+    const [tiposResult, produtosResult] = await Promise.all([
+      supabase.rpc("app_listar_inventario_tipos", { p_token: sessionToken }),
+      supabase.rpc("app_listar_inventario_produtos", { p_token: sessionToken })
+    ]);
+
+    if (tiposResult.error) {
+      setError(tiposResult.error.message);
+      return;
+    }
+
+    if (produtosResult.error) {
+      setError(produtosResult.error.message);
+      return;
+    }
+
+    setInventarioTipos(tiposResult.data?.length ? tiposResult.data.map(normalizeInventarioTipo) : baseInventarioTipos);
+    setInventarioProdutos((produtosResult.data ?? []).map(normalizeInventarioProduto));
   }, [isDemoMode, sessionToken, supabase]);
 
   const loadData = useCallback(async () => {
@@ -1748,6 +1933,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }, [isLoggedIn, isTabaqueiraMode, loadTabaqueiraData]);
 
   useEffect(() => {
+    if (isLoggedIn && isInventarioMode) {
+      void loadInventarioData();
+    }
+  }, [isInventarioMode, isLoggedIn, loadInventarioData]);
+
+  useEffect(() => {
     setForm((current) => ({ ...current, data: selectedDate }));
     setDespesaForm((current) => ({ ...current, data: selectedDate }));
     setNovadisConsumoForm((current) => ({ ...current, data: selectedDate }));
@@ -1818,6 +2009,25 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     }
   }, [activeTiposDespesa, despesaForm.id, despesaForm.tipoDespesa]);
 
+  useEffect(() => {
+    if (inventarioProdutoForm.id) {
+      return;
+    }
+
+    if (!activeInventarioTipos.length && inventarioProdutoForm.tipoId) {
+      setInventarioProdutoForm((current) => ({ ...current, tipoId: "" }));
+      return;
+    }
+
+    if (activeInventarioTipos[0]) {
+      const hasSelectedType = activeInventarioTipos.some((tipo) => tipo.id === inventarioProdutoForm.tipoId);
+
+      if (!hasSelectedType) {
+        setInventarioProdutoForm((current) => ({ ...current, tipoId: activeInventarioTipos[0].id }));
+      }
+    }
+  }, [activeInventarioTipos, inventarioProdutoForm.id, inventarioProdutoForm.tipoId]);
+
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -1878,6 +2088,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setTabaqueiraSaidas([]);
     setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
     setTabaqueiraSaidaForm(emptyTabaqueiraSaidaForm(startDate));
+    setInventarioTipos(baseInventarioTipos);
+    setInventarioProdutos([]);
+    setInventarioProdutoForm(emptyInventarioProdutoForm());
+    setInventarioTipoForm(emptyInventarioTipoForm());
   }
 
   function handleSelectDia(value: string) {
@@ -3513,6 +3727,335 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     await loadTabaqueiraData();
   }
 
+  function handleCancelEditInventarioProduto() {
+    setInventarioProdutoForm((current) => ({
+      ...emptyInventarioProdutoForm(),
+      tipoId: activeInventarioTipos.some((tipo) => tipo.id === current.tipoId)
+        ? current.tipoId
+        : activeInventarioTipos[0]?.id ?? ""
+    }));
+  }
+
+  function handleCancelEditInventarioTipo() {
+    setInventarioTipoForm(emptyInventarioTipoForm());
+  }
+
+  async function handleSaveInventarioTipo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const nome = normalizeInventoryText(inventarioTipoForm.nome);
+
+    if (!nome) {
+      setError("Indica o nome do tipo de produto.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const exists = (store.inventarioTipos ?? []).some(
+        (tipo) => tipo.id !== inventarioTipoForm.id && tipo.nome.toLowerCase() === nome.toLowerCase()
+      );
+
+      if (exists) {
+        setError("Esse tipo de produto já existe.");
+        return;
+      }
+
+      const existingIndex = inventarioTipoForm.id
+        ? (store.inventarioTipos ?? []).findIndex((tipo) => tipo.id === inventarioTipoForm.id)
+        : -1;
+      const existingTipo = existingIndex >= 0 ? normalizeInventarioTipo(store.inventarioTipos[existingIndex]) : null;
+      const now = new Date().toISOString();
+      const nextTipo: InventarioTipoProduto = {
+        id: existingTipo?.id ?? makeId("inventario-tipo"),
+        nome,
+        ativo: inventarioTipoForm.ativo,
+        criado_por_id: existingTipo?.criado_por_id ?? null,
+        criado_por_nome: existingTipo?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: null,
+        atualizado_por_nome: currentUserName,
+        created_at: existingTipo?.created_at ?? now,
+        updated_at: now
+      };
+      const nextTipos =
+        existingIndex >= 0
+          ? store.inventarioTipos.map((tipo, index) => (index === existingIndex ? nextTipo : tipo))
+          : [...(store.inventarioTipos ?? []), nextTipo];
+      const nextProdutos = (store.inventarioProdutos ?? []).map((produto) =>
+        produto.tipo_id === nextTipo.id ? { ...produto, tipo_nome: nextTipo.nome } : produto
+      );
+
+      writeDemoStore({ ...store, inventarioTipos: nextTipos, inventarioProdutos: nextProdutos });
+      setInventarioTipos(nextTipos.map(normalizeInventarioTipo));
+      setInventarioProdutos(nextProdutos.map(normalizeInventarioProduto));
+      setInventarioTipoForm(emptyInventarioTipoForm());
+      setNotice("Tipo de produto guardado.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setInventarioTipoSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_guardar_inventario_tipo", {
+      p_token: sessionToken,
+      p_id: inventarioTipoForm.id,
+      p_nome: nome,
+      p_ativo: inventarioTipoForm.ativo
+    });
+
+    setInventarioTipoSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setInventarioTipoForm(emptyInventarioTipoForm());
+    setNotice("Tipo de produto guardado.");
+    await loadInventarioData();
+  }
+
+  function handleEditInventarioTipo(tipo: InventarioTipoProduto) {
+    setError("");
+    setNotice("");
+    setInventarioTipoForm({
+      id: tipo.id,
+      nome: tipo.nome,
+      ativo: tipo.ativo
+    });
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("inventario-tipos-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  async function handleDeleteInventarioTipo(tipo: InventarioTipoProduto) {
+    if (!canDeleteData) {
+      setError("Não tem privilégios para apagar tipos de produto.");
+      return;
+    }
+
+    const hasProdutos = inventarioProdutos.some((produto) => produto.tipo_id === tipo.id);
+
+    if (hasProdutos) {
+      setError("Este tipo tem produtos associados. Desativa ou altera esses produtos antes de apagar.");
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Apagar o tipo "${tipo.nome}"?`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextTipos = (store.inventarioTipos ?? []).filter((current) => current.id !== tipo.id);
+
+      writeDemoStore({ ...store, inventarioTipos: nextTipos });
+      setInventarioTipos(nextTipos.map(normalizeInventarioTipo));
+      if (inventarioTipoForm.id === tipo.id) {
+        handleCancelEditInventarioTipo();
+      }
+      setNotice("Tipo de produto apagado.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_inventario_tipo", {
+      p_token: sessionToken,
+      p_id: tipo.id
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    if (inventarioTipoForm.id === tipo.id) {
+      handleCancelEditInventarioTipo();
+    }
+    setNotice("Tipo de produto apagado.");
+    await loadInventarioData();
+  }
+
+  async function handleSaveInventarioProduto(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const produto = normalizeInventoryText(inventarioProdutoForm.produto);
+    const responsavel = normalizeInventoryText(inventarioProdutoForm.responsavel);
+    const quantidadeRecebida = parseMoney(inventarioProdutoForm.quantidadeRecebida);
+    const quantidadeRetirada = parseMoney(inventarioProdutoForm.quantidadeRetirada);
+    const tipo = inventarioTipos.find((item) => item.id === inventarioProdutoForm.tipoId) ?? null;
+    const editingId = inventarioProdutoForm.id;
+
+    if (!produto) {
+      setError("Indica o produto.");
+      return;
+    }
+
+    if (!tipo) {
+      setError("Escolhe o tipo de produto.");
+      return;
+    }
+
+    if (quantidadeRecebida < 0 || quantidadeRetirada < 0) {
+      setError("As quantidades não podem ser negativas.");
+      return;
+    }
+
+    if (quantidadeRetirada > quantidadeRecebida) {
+      setError("A quantidade retirada não pode ser maior que a quantidade recebida.");
+      return;
+    }
+
+    if (!responsavel) {
+      setError("Indica o responsável.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const existingIndex = editingId
+        ? (store.inventarioProdutos ?? []).findIndex((current) => current.id === editingId)
+        : -1;
+      const existingProduto =
+        existingIndex >= 0 ? normalizeInventarioProduto(store.inventarioProdutos[existingIndex]) : null;
+      const now = new Date().toISOString();
+      const nextProduto: InventarioProduto = {
+        id: existingProduto?.id ?? makeId("inventario-produto"),
+        produto,
+        tipo_id: tipo.id,
+        tipo_nome: tipo.nome,
+        quantidade_recebida: quantidadeRecebida,
+        quantidade_retirada: quantidadeRetirada,
+        responsavel,
+        criado_por_id: existingProduto?.criado_por_id ?? null,
+        criado_por_nome: existingProduto?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: editingId ? null : existingProduto?.atualizado_por_id ?? null,
+        atualizado_por_nome: editingId ? currentUserName : existingProduto?.atualizado_por_nome ?? null,
+        created_at: existingProduto?.created_at ?? now,
+        updated_at: now
+      };
+      const nextProdutos =
+        existingIndex >= 0
+          ? store.inventarioProdutos.map((current, index) => (index === existingIndex ? nextProduto : current))
+          : [nextProduto, ...(store.inventarioProdutos ?? [])];
+
+      writeDemoStore({ ...store, inventarioProdutos: nextProdutos });
+      setInventarioProdutos(nextProdutos.map(normalizeInventarioProduto));
+      handleCancelEditInventarioProduto();
+      setNotice(editingId ? "Produto de inventário alterado." : "Produto de inventário registado.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setInventarioProdutoSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_guardar_inventario_produto", {
+      p_token: sessionToken,
+      p_id: editingId,
+      p_produto: produto,
+      p_tipo_id: tipo.id,
+      p_quantidade_recebida: quantidadeRecebida,
+      p_quantidade_retirada: quantidadeRetirada,
+      p_responsavel: responsavel
+    });
+
+    setInventarioProdutoSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    handleCancelEditInventarioProduto();
+    setNotice(editingId ? "Produto de inventário alterado." : "Produto de inventário registado.");
+    await loadInventarioData();
+  }
+
+  function handleEditInventarioProduto(produto: InventarioProduto) {
+    setError("");
+    setNotice("");
+    setInventarioProdutoForm({
+      id: produto.id,
+      produto: produto.produto,
+      tipoId: produto.tipo_id ?? activeInventarioTipos[0]?.id ?? "",
+      quantidadeRecebida: String(Number(produto.quantidade_recebida)),
+      quantidadeRetirada: String(Number(produto.quantidade_retirada)),
+      responsavel: produto.responsavel
+    });
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("inventario-produtos-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  async function handleDeleteInventarioProduto(id: string) {
+    if (!canDeleteData) {
+      setError("Não tem privilégios para apagar dados inseridos.");
+      return;
+    }
+
+    const shouldDelete = window.confirm("Apagar este produto do inventário?");
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextProdutos = (store.inventarioProdutos ?? []).filter((produto) => produto.id !== id);
+
+      writeDemoStore({ ...store, inventarioProdutos: nextProdutos });
+      setInventarioProdutos(nextProdutos.map(normalizeInventarioProduto));
+      if (inventarioProdutoForm.id === id) {
+        handleCancelEditInventarioProduto();
+      }
+      setNotice("Produto de inventário apagado.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_inventario_produto", {
+      p_token: sessionToken,
+      p_id: id
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    if (inventarioProdutoForm.id === id) {
+      handleCancelEditInventarioProduto();
+    }
+    setNotice("Produto de inventário apagado.");
+    await loadInventarioData();
+  }
+
   async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -4316,6 +4859,16 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             >
               <Receipt size={18} aria-hidden="true" />
               Tabaqueira
+            </button>
+            <button
+              className={`tab-button ${stockTab === "inventario" ? "active" : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={stockTab === "inventario"}
+              onClick={() => setStockTab("inventario")}
+            >
+              <Tags size={18} aria-hidden="true" />
+              Inventário
             </button>
           </div>
         </section>
@@ -5276,6 +5829,355 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </div>
             ) : (
               <div className="empty-state compact">Ainda não existem saídas da Tabaqueira.</div>
+            )}
+          </section>
+        </>
+      ) : null}
+
+      {isInventarioMode ? (
+        <>
+          <section className="summary-grid" aria-label="Totais Inventário">
+            <article className="metric metric-total">
+              <span>Disponível</span>
+              <strong>{formatQuantity(inventarioTotalDisponivel)}</strong>
+              <small>
+                {formatQuantity(inventarioTotalRecebido)} recebidos · {formatQuantity(inventarioTotalRetirado)} retirados
+              </small>
+            </article>
+            <article className="metric metric-total">
+              <span>Produtos</span>
+              <strong>{inventarioProdutos.length}</strong>
+              <small>{activeInventarioTipos.length} tipos ativos</small>
+            </article>
+            <article className="metric metric-total">
+              <span>Retirado</span>
+              <strong>{formatQuantity(inventarioTotalRetirado)}</strong>
+              <small>Quantidade já levantada</small>
+            </article>
+            {inventarioPorTipo.map((item) => (
+              <article className="metric" key={item.tipoNome}>
+                <span>{item.tipoNome}</span>
+                <strong>{formatQuantity(item.disponivel)}</strong>
+                <small>
+                  {formatQuantity(item.recebido)} recebidos · {formatQuantity(item.retirado)} retirados
+                </small>
+              </article>
+            ))}
+          </section>
+
+          <section className="panel" id="inventario-produtos-panel">
+            <div className="panel-heading table-heading">
+              <div className="panel-heading-inline">
+                <div className="heading-icon">
+                  <Plus size={20} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="eyebrow">Inventário</p>
+                  <h2>{isEditingInventarioProduto ? "Editar produto" : "Registo de produtos"}</h2>
+                  <span className="panel-subtitle">
+                    Regista produto, tipo, quantidades recebidas/retiradas e responsável.
+                  </span>
+                </div>
+              </div>
+              <button
+                className="icon-text-button"
+                type="button"
+                onClick={() => {
+                  void loadInventarioData();
+                }}
+                disabled={inventarioProdutoSaving || inventarioTipoSaving}
+              >
+                <RefreshCw
+                  size={18}
+                  className={inventarioProdutoSaving || inventarioTipoSaving ? "spin" : ""}
+                  aria-hidden="true"
+                />
+                Atualizar
+              </button>
+            </div>
+
+            <form className="inventario-produto-form" onSubmit={handleSaveInventarioProduto}>
+              {isEditingInventarioProduto ? (
+                <div className="edit-menu wide-field">
+                  <div>
+                    <strong>Menu de edição</strong>
+                    <span>{inventarioProdutoForm.produto}</span>
+                    <small>Confirma as quantidades antes de guardar a alteração.</small>
+                  </div>
+                  <button className="icon-text-button" type="button" onClick={handleCancelEditInventarioProduto}>
+                    <X size={18} aria-hidden="true" />
+                    Cancelar
+                  </button>
+                </div>
+              ) : null}
+
+              <label>
+                Produto
+                <input
+                  type="text"
+                  value={inventarioProdutoForm.produto}
+                  onChange={(event) =>
+                    setInventarioProdutoForm((current) => ({ ...current, produto: event.target.value }))
+                  }
+                  placeholder="Nome do produto"
+                  required
+                />
+              </label>
+              <label>
+                Tipo
+                <select
+                  value={activeInventarioTipos.length ? inventarioProdutoForm.tipoId : ""}
+                  onChange={(event) =>
+                    setInventarioProdutoForm((current) => ({ ...current, tipoId: event.target.value }))
+                  }
+                  disabled={!activeInventarioTipos.length || inventarioProdutoSaving}
+                  required
+                >
+                  {activeInventarioTipos.length ? null : <option value="">Criar tipo primeiro</option>}
+                  {activeInventarioTipos.map((tipo) => (
+                    <option key={tipo.id} value={tipo.id}>
+                      {tipo.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Recebidas
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={inventarioProdutoForm.quantidadeRecebida}
+                  onChange={(event) =>
+                    setInventarioProdutoForm((current) => ({
+                      ...current,
+                      quantidadeRecebida: event.target.value
+                    }))
+                  }
+                  placeholder="0"
+                  required
+                  disabled={inventarioProdutoSaving}
+                />
+              </label>
+              <label>
+                Retiradas
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={inventarioProdutoForm.quantidadeRetirada}
+                  onChange={(event) =>
+                    setInventarioProdutoForm((current) => ({
+                      ...current,
+                      quantidadeRetirada: event.target.value
+                    }))
+                  }
+                  placeholder="0"
+                  required
+                  disabled={inventarioProdutoSaving}
+                />
+              </label>
+              <label>
+                Responsável
+                <input
+                  type="text"
+                  value={inventarioProdutoForm.responsavel}
+                  onChange={(event) =>
+                    setInventarioProdutoForm((current) => ({ ...current, responsavel: event.target.value }))
+                  }
+                  placeholder="Nome"
+                  required
+                  disabled={inventarioProdutoSaving}
+                />
+              </label>
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={inventarioProdutoSaving || !activeInventarioTipos.length}
+              >
+                <Save size={18} aria-hidden="true" />
+                {inventarioProdutoSaving
+                  ? "A guardar"
+                  : isEditingInventarioProduto
+                    ? "Guardar alteração"
+                    : "Registar"}
+              </button>
+            </form>
+
+            {inventarioProdutos.length ? (
+              <div className="table-wrap panel-table">
+                <table className="agent-table stock-table">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th>Tipo</th>
+                      <th>Recebidas</th>
+                      <th>Retiradas</th>
+                      <th>Disponível</th>
+                      <th>Responsável</th>
+                      <th>Registado por</th>
+                      <th>Última alteração</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventarioProdutos.map((produto) => {
+                      const recebido = Number(produto.quantidade_recebida);
+                      const retirado = Number(produto.quantidade_retirada);
+
+                      return (
+                        <tr key={produto.id}>
+                          <td>{produto.produto}</td>
+                          <td>{produto.tipo_nome}</td>
+                          <td>{formatQuantity(recebido)}</td>
+                          <td>{formatQuantity(retirado)}</td>
+                          <td>
+                            <strong>{formatQuantity(Math.max(recebido - retirado, 0))}</strong>
+                          </td>
+                          <td>{produto.responsavel}</td>
+                          <td>{produto.criado_por_nome}</td>
+                          <td>
+                            {produto.atualizado_por_nome
+                              ? `${produto.atualizado_por_nome} · ${formatDateTimeLabel(produto.updated_at)}`
+                              : "Sem alterações"}
+                          </td>
+                          <td>
+                            <div className="row-actions">
+                              <button
+                                className="icon-button"
+                                type="button"
+                                aria-label="Editar produto"
+                                onClick={() => handleEditInventarioProduto(produto)}
+                              >
+                                <Pencil size={16} aria-hidden="true" />
+                              </button>
+                              <button
+                                className="icon-button danger"
+                                type="button"
+                                aria-label="Apagar produto"
+                                onClick={() => void handleDeleteInventarioProduto(produto.id)}
+                              >
+                                <Trash2 size={16} aria-hidden="true" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem produtos no inventário.</div>
+            )}
+          </section>
+
+          <section className="panel" id="inventario-tipos-panel">
+            <div className="panel-heading">
+              <div className="heading-icon">
+                <Tags size={20} aria-hidden="true" />
+              </div>
+              <div>
+                <p className="eyebrow">Inventário</p>
+                <h2>{isEditingInventarioTipo ? "Editar tipo de produto" : "Tipos de produto"}</h2>
+                <span className="panel-subtitle">Cria e organiza os tipos usados no registo de produtos.</span>
+              </div>
+            </div>
+
+            <form className="inventario-tipo-form" onSubmit={handleSaveInventarioTipo}>
+              {isEditingInventarioTipo ? (
+                <div className="edit-menu wide-field">
+                  <div>
+                    <strong>Menu de edição</strong>
+                    <span>{inventarioTipoForm.nome}</span>
+                  </div>
+                  <button className="icon-text-button" type="button" onClick={handleCancelEditInventarioTipo}>
+                    <X size={18} aria-hidden="true" />
+                    Cancelar
+                  </button>
+                </div>
+              ) : null}
+
+              <label>
+                Tipo de produto
+                <input
+                  type="text"
+                  value={inventarioTipoForm.nome}
+                  onChange={(event) =>
+                    setInventarioTipoForm((current) => ({ ...current, nome: event.target.value }))
+                  }
+                  placeholder="Ex.: Bebidas"
+                  required
+                  disabled={inventarioTipoSaving}
+                />
+              </label>
+              <label className="checkbox-label inline-checkbox">
+                <input
+                  type="checkbox"
+                  checked={inventarioTipoForm.ativo}
+                  onChange={(event) =>
+                    setInventarioTipoForm((current) => ({ ...current, ativo: event.target.checked }))
+                  }
+                  disabled={inventarioTipoSaving}
+                />
+                Ativo
+              </label>
+              <button className="primary-button" type="submit" disabled={inventarioTipoSaving}>
+                <Save size={18} aria-hidden="true" />
+                {inventarioTipoSaving ? "A guardar" : isEditingInventarioTipo ? "Guardar alteração" : "Guardar"}
+              </button>
+            </form>
+
+            {inventarioTipos.length ? (
+              <div className="table-wrap panel-table">
+                <table className="agent-table">
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Estado</th>
+                      <th>Atualizado por</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventarioTipos.map((tipo) => (
+                      <tr key={tipo.id}>
+                        <td>{tipo.nome}</td>
+                        <td>{tipo.ativo ? "Ativo" : "Inativo"}</td>
+                        <td>
+                          {tipo.atualizado_por_nome
+                            ? `${tipo.atualizado_por_nome} · ${formatDateTimeLabel(tipo.updated_at)}`
+                            : "Sistema"}
+                        </td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              className="icon-button"
+                              type="button"
+                              aria-label="Editar tipo"
+                              onClick={() => handleEditInventarioTipo(tipo)}
+                            >
+                              <Pencil size={16} aria-hidden="true" />
+                            </button>
+                            <button
+                              className="icon-button danger"
+                              type="button"
+                              aria-label="Apagar tipo"
+                              onClick={() => void handleDeleteInventarioTipo(tipo)}
+                            >
+                              <Trash2 size={16} aria-hidden="true" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem tipos de produto.</div>
             )}
           </section>
         </>
