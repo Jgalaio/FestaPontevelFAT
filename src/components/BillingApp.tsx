@@ -74,6 +74,7 @@ type DemoStore = {
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "agente" | "dias" | "postos" | "tipos" | "utilizadores";
 type StockTab = "novadis" | "tabaqueira" | "inventario";
+type InventarioTab = "consulta" | "tipos";
 type BillingAppMode = "agent" | "novadis" | "stocks" | "overview" | "register" | "management" | "reports";
 type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
@@ -164,7 +165,12 @@ type InventarioProdutoForm = {
   produto: string;
   tipoId: string;
   quantidadeRecebida: string;
-  quantidadeRetirada: string;
+  responsavel: string;
+};
+
+type InventarioRetiradaForm = {
+  produtoId: string;
+  quantidade: string;
   responsavel: string;
 };
 
@@ -536,7 +542,14 @@ function emptyInventarioProdutoForm(): InventarioProdutoForm {
     produto: "",
     tipoId: "",
     quantidadeRecebida: "",
-    quantidadeRetirada: "",
+    responsavel: ""
+  };
+}
+
+function emptyInventarioRetiradaForm(): InventarioRetiradaForm {
+  return {
+    produtoId: "",
+    quantidade: "",
     responsavel: ""
   };
 }
@@ -1082,6 +1095,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [inventarioProdutoForm, setInventarioProdutoForm] = useState<InventarioProdutoForm>(() =>
     emptyInventarioProdutoForm()
   );
+  const [inventarioRetiradaForm, setInventarioRetiradaForm] = useState<InventarioRetiradaForm>(() =>
+    emptyInventarioRetiradaForm()
+  );
   const [inventarioTipoForm, setInventarioTipoForm] = useState<InventarioTipoForm>(() => emptyInventarioTipoForm());
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
@@ -1090,6 +1106,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [entryTab, setEntryTab] = useState<EntryTab>("faturacao");
   const [sideTab, setSideTab] = useState<SideTab>("dias");
   const [stockTab, setStockTab] = useState<StockTab>("novadis");
+  const [inventarioTab, setInventarioTab] = useState<InventarioTab>("consulta");
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1105,6 +1122,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [tabaqueiraEntradaSaving, setTabaqueiraEntradaSaving] = useState(false);
   const [tabaqueiraSaidaSaving, setTabaqueiraSaidaSaving] = useState(false);
   const [inventarioProdutoSaving, setInventarioProdutoSaving] = useState(false);
+  const [inventarioRetiradaSaving, setInventarioRetiradaSaving] = useState(false);
   const [inventarioTipoSaving, setInventarioTipoSaving] = useState(false);
   const [overviewOnlyFestaTotal, setOverviewOnlyFestaTotal] = useState(false);
   const [overviewOnlyFestaSaldo, setOverviewOnlyFestaSaldo] = useState(false);
@@ -1511,6 +1529,13 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     0
   );
   const inventarioTotalDisponivel = Math.max(inventarioTotalRecebido - inventarioTotalRetirado, 0);
+  const inventarioProdutosDisponiveis = useMemo(
+    () =>
+      inventarioProdutos
+        .filter((produto) => Number(produto.quantidade_recebida) - Number(produto.quantidade_retirada) > 0)
+        .sort((a, b) => a.produto.localeCompare(b.produto)),
+    [inventarioProdutos]
+  );
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -2028,6 +2053,21 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     }
   }, [activeInventarioTipos, inventarioProdutoForm.id, inventarioProdutoForm.tipoId]);
 
+  useEffect(() => {
+    const hasSelectedProduto = inventarioProdutosDisponiveis.some(
+      (produto) => produto.id === inventarioRetiradaForm.produtoId
+    );
+
+    if (!hasSelectedProduto && inventarioProdutosDisponiveis[0]) {
+      setInventarioRetiradaForm((current) => ({ ...current, produtoId: inventarioProdutosDisponiveis[0].id }));
+      return;
+    }
+
+    if (!inventarioProdutosDisponiveis.length && inventarioRetiradaForm.produtoId) {
+      setInventarioRetiradaForm((current) => ({ ...current, produtoId: "" }));
+    }
+  }, [inventarioProdutosDisponiveis, inventarioRetiradaForm.produtoId]);
+
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -2091,6 +2131,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setInventarioTipos(baseInventarioTipos);
     setInventarioProdutos([]);
     setInventarioProdutoForm(emptyInventarioProdutoForm());
+    setInventarioRetiradaForm(emptyInventarioRetiradaForm());
     setInventarioTipoForm(emptyInventarioTipoForm());
   }
 
@@ -3898,9 +3939,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     const produto = normalizeInventoryText(inventarioProdutoForm.produto);
     const responsavel = normalizeInventoryText(inventarioProdutoForm.responsavel);
     const quantidadeRecebida = parseMoney(inventarioProdutoForm.quantidadeRecebida);
-    const quantidadeRetirada = parseMoney(inventarioProdutoForm.quantidadeRetirada);
     const tipo = inventarioTipos.find((item) => item.id === inventarioProdutoForm.tipoId) ?? null;
     const editingId = inventarioProdutoForm.id;
+    const existingProduto = editingId
+      ? inventarioProdutos.find((current) => current.id === editingId) ?? null
+      : null;
+    const quantidadeRetiradaExistente = Number(existingProduto?.quantidade_retirada ?? 0);
 
     if (!produto) {
       setError("Indica o produto.");
@@ -3912,13 +3956,13 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    if (quantidadeRecebida < 0 || quantidadeRetirada < 0) {
-      setError("As quantidades não podem ser negativas.");
+    if (quantidadeRecebida < 0) {
+      setError("A quantidade recebida não pode ser negativa.");
       return;
     }
 
-    if (quantidadeRetirada > quantidadeRecebida) {
-      setError("A quantidade retirada não pode ser maior que a quantidade recebida.");
+    if (quantidadeRetiradaExistente > quantidadeRecebida) {
+      setError("A quantidade recebida não pode ficar abaixo do que já foi retirado.");
       return;
     }
 
@@ -3932,22 +3976,22 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       const existingIndex = editingId
         ? (store.inventarioProdutos ?? []).findIndex((current) => current.id === editingId)
         : -1;
-      const existingProduto =
+      const existingStoreProduto =
         existingIndex >= 0 ? normalizeInventarioProduto(store.inventarioProdutos[existingIndex]) : null;
       const now = new Date().toISOString();
       const nextProduto: InventarioProduto = {
-        id: existingProduto?.id ?? makeId("inventario-produto"),
+        id: existingStoreProduto?.id ?? makeId("inventario-produto"),
         produto,
         tipo_id: tipo.id,
         tipo_nome: tipo.nome,
         quantidade_recebida: quantidadeRecebida,
-        quantidade_retirada: quantidadeRetirada,
+        quantidade_retirada: Number(existingStoreProduto?.quantidade_retirada ?? 0),
         responsavel,
-        criado_por_id: existingProduto?.criado_por_id ?? null,
-        criado_por_nome: existingProduto?.criado_por_nome ?? currentUserName,
-        atualizado_por_id: editingId ? null : existingProduto?.atualizado_por_id ?? null,
-        atualizado_por_nome: editingId ? currentUserName : existingProduto?.atualizado_por_nome ?? null,
-        created_at: existingProduto?.created_at ?? now,
+        criado_por_id: existingStoreProduto?.criado_por_id ?? null,
+        criado_por_nome: existingStoreProduto?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: editingId ? null : existingStoreProduto?.atualizado_por_id ?? null,
+        atualizado_por_nome: editingId ? currentUserName : existingStoreProduto?.atualizado_por_nome ?? null,
+        created_at: existingStoreProduto?.created_at ?? now,
         updated_at: now
       };
       const nextProdutos =
@@ -3974,7 +4018,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       p_produto: produto,
       p_tipo_id: tipo.id,
       p_quantidade_recebida: quantidadeRecebida,
-      p_quantidade_retirada: quantidadeRetirada,
+      p_quantidade_retirada: quantidadeRetiradaExistente,
       p_responsavel: responsavel
     });
 
@@ -3990,6 +4034,92 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     await loadInventarioData();
   }
 
+  async function handleSaveInventarioRetirada(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const produto = inventarioProdutos.find((current) => current.id === inventarioRetiradaForm.produtoId) ?? null;
+    const quantidade = parseMoney(inventarioRetiradaForm.quantidade);
+    const responsavel = normalizeInventoryText(inventarioRetiradaForm.responsavel);
+
+    if (!produto) {
+      setError("Escolhe o produto a retirar.");
+      return;
+    }
+
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      setError("Indica uma quantidade retirada maior que zero.");
+      return;
+    }
+
+    const disponivel = Number(produto.quantidade_recebida) - Number(produto.quantidade_retirada);
+
+    if (quantidade > disponivel) {
+      setError(`Só existem ${formatQuantity(disponivel)} disponíveis para ${produto.produto}.`);
+      return;
+    }
+
+    if (!responsavel) {
+      setError("Indica o responsável pela retirada.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const now = new Date().toISOString();
+      const nextProdutos = (store.inventarioProdutos ?? []).map((current) => {
+        if (current.id !== produto.id) {
+          return current;
+        }
+
+        const normalizedProduto = normalizeInventarioProduto(current);
+
+        return {
+          ...normalizedProduto,
+          quantidade_retirada: Number(normalizedProduto.quantidade_retirada) + quantidade,
+          responsavel,
+          atualizado_por_id: null,
+          atualizado_por_nome: currentUserName,
+          updated_at: now
+        };
+      });
+
+      writeDemoStore({ ...store, inventarioProdutos: nextProdutos });
+      setInventarioProdutos(nextProdutos.map(normalizeInventarioProduto));
+      setInventarioRetiradaForm({
+        ...emptyInventarioRetiradaForm(),
+        produtoId: inventarioProdutosDisponiveis.find((current) => current.id !== produto.id)?.id ?? produto.id
+      });
+      setNotice("Retirada de produto registada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setInventarioRetiradaSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_registar_inventario_retirada", {
+      p_token: sessionToken,
+      p_produto_id: produto.id,
+      p_quantidade: quantidade,
+      p_responsavel: responsavel
+    });
+
+    setInventarioRetiradaSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setInventarioRetiradaForm(emptyInventarioRetiradaForm());
+    setNotice("Retirada de produto registada.");
+    await loadInventarioData();
+  }
+
   function handleEditInventarioProduto(produto: InventarioProduto) {
     setError("");
     setNotice("");
@@ -3998,7 +4128,6 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       produto: produto.produto,
       tipoId: produto.tipo_id ?? activeInventarioTipos[0]?.id ?? "",
       quantidadeRecebida: String(Number(produto.quantidade_recebida)),
-      quantidadeRetirada: String(Number(produto.quantidade_retirada)),
       responsavel: produto.responsavel
     });
 
@@ -5865,6 +5994,33 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             ))}
           </section>
 
+          <section className="stock-tabs-shell" aria-label="Secções do inventário">
+            <div className="side-tabs inventory-tabs" role="tablist" aria-label="Inventário">
+              <button
+                className={`tab-button ${inventarioTab === "consulta" ? "active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={inventarioTab === "consulta"}
+                onClick={() => setInventarioTab("consulta")}
+              >
+                <Plus size={18} aria-hidden="true" />
+                Inserir/Consulta
+              </button>
+              <button
+                className={`tab-button ${inventarioTab === "tipos" ? "active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={inventarioTab === "tipos"}
+                onClick={() => setInventarioTab("tipos")}
+              >
+                <Tags size={18} aria-hidden="true" />
+                Tipos/Criação
+              </button>
+            </div>
+          </section>
+
+          {inventarioTab === "consulta" ? (
+            <>
           <section className="panel" id="inventario-produtos-panel">
             <div className="panel-heading table-heading">
               <div className="panel-heading-inline">
@@ -5875,7 +6031,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   <p className="eyebrow">Inventário</p>
                   <h2>{isEditingInventarioProduto ? "Editar produto" : "Registo de produtos"}</h2>
                   <span className="panel-subtitle">
-                    Regista produto, tipo, quantidades recebidas/retiradas e responsável.
+                    Regista produto, tipo, quantidade recebida e responsável.
                   </span>
                 </div>
               </div>
@@ -5885,11 +6041,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 onClick={() => {
                   void loadInventarioData();
                 }}
-                disabled={inventarioProdutoSaving || inventarioTipoSaving}
+                disabled={inventarioProdutoSaving || inventarioRetiradaSaving || inventarioTipoSaving}
               >
                 <RefreshCw
                   size={18}
-                  className={inventarioProdutoSaving || inventarioTipoSaving ? "spin" : ""}
+                  className={inventarioProdutoSaving || inventarioRetiradaSaving || inventarioTipoSaving ? "spin" : ""}
                   aria-hidden="true"
                 />
                 Atualizar
@@ -5961,25 +6117,6 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 />
               </label>
               <label>
-                Retiradas
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={inventarioProdutoForm.quantidadeRetirada}
-                  onChange={(event) =>
-                    setInventarioProdutoForm((current) => ({
-                      ...current,
-                      quantidadeRetirada: event.target.value
-                    }))
-                  }
-                  placeholder="0"
-                  required
-                  disabled={inventarioProdutoSaving}
-                />
-              </label>
-              <label>
                 Responsável
                 <input
                   type="text"
@@ -6003,6 +6140,74 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   : isEditingInventarioProduto
                     ? "Guardar alteração"
                     : "Registar"}
+              </button>
+            </form>
+
+            <form className="inventario-retirada-form" onSubmit={handleSaveInventarioRetirada}>
+              <div className="edit-menu wide-field">
+                <div>
+                  <strong>Retirar produto</strong>
+                  <span>Escolhe o produto e a quantidade retirada.</span>
+                </div>
+              </div>
+              <label>
+                Produto
+                <select
+                  value={inventarioProdutosDisponiveis.length ? inventarioRetiradaForm.produtoId : ""}
+                  onChange={(event) =>
+                    setInventarioRetiradaForm((current) => ({ ...current, produtoId: event.target.value }))
+                  }
+                  disabled={!inventarioProdutosDisponiveis.length || inventarioRetiradaSaving}
+                  required
+                >
+                  {inventarioProdutosDisponiveis.length ? null : <option value="">Sem stock disponível</option>}
+                  {inventarioProdutosDisponiveis.map((produto) => {
+                    const disponivel = Number(produto.quantidade_recebida) - Number(produto.quantidade_retirada);
+
+                    return (
+                      <option key={produto.id} value={produto.id}>
+                        {produto.produto} · {formatQuantity(disponivel)} disponíveis
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              <label>
+                Quantidade retirada
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={inventarioRetiradaForm.quantidade}
+                  onChange={(event) =>
+                    setInventarioRetiradaForm((current) => ({ ...current, quantidade: event.target.value }))
+                  }
+                  placeholder="0"
+                  required
+                  disabled={inventarioRetiradaSaving}
+                />
+              </label>
+              <label>
+                Responsável
+                <input
+                  type="text"
+                  value={inventarioRetiradaForm.responsavel}
+                  onChange={(event) =>
+                    setInventarioRetiradaForm((current) => ({ ...current, responsavel: event.target.value }))
+                  }
+                  placeholder="Nome"
+                  required
+                  disabled={inventarioRetiradaSaving}
+                />
+              </label>
+              <button
+                className="secondary-button"
+                type="submit"
+                disabled={inventarioRetiradaSaving || !inventarioProdutosDisponiveis.length}
+              >
+                <Save size={18} aria-hidden="true" />
+                {inventarioRetiradaSaving ? "A guardar" : "Registar retirada"}
               </button>
             </form>
 
@@ -6073,8 +6278,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <div className="empty-state compact">Ainda não existem produtos no inventário.</div>
             )}
           </section>
+            </>
+          ) : null}
 
-          <section className="panel" id="inventario-tipos-panel">
+          {inventarioTab === "tipos" ? (
+            <section className="panel" id="inventario-tipos-panel">
             <div className="panel-heading">
               <div className="heading-icon">
                 <Tags size={20} aria-hidden="true" />
@@ -6179,7 +6387,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             ) : (
               <div className="empty-state compact">Ainda não existem tipos de produto.</div>
             )}
-          </section>
+            </section>
+          ) : null}
         </>
       ) : null}
 

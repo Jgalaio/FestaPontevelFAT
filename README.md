@@ -122,7 +122,7 @@ Os valores da Novadis são apresentados em `Stocks > Novadis` e não entram nos 
 
 A Tabaqueira fica em `Stocks > Tabaqueira`. Permite registar receções por marca, quantidade, preço fornecedor e PVP, e controlar saídas por dia da festa, marca, pessoa que levou e posto de destino. Apenas utilizadores `admin` podem corrigir ou apagar receções; saídas podem ser editadas com justificação e apagadas por `admin`.
 
-O Inventário fica em `Stocks > Inventário`. Tem uma secção para registar produtos com tipo, quantidades recebidas/retiradas e responsável, e outra secção para criar/editar tipos de produto. Produtos podem ser corrigidos pela equipa e apagados por `admin`.
+O Inventário fica em `Stocks > Inventário`. Tem as abas `Inserir/Consulta` e `Tipos/Criação`: na primeira registas produtos recebidos, consultas stock e fazes retiradas escolhendo o produto e a quantidade; na segunda crias e editas tipos de produto. Produtos podem ser corrigidos pela equipa e apagados por `admin`.
 
 ## Próximos passos recomendados
 

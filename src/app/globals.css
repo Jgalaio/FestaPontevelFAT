@@ -509,6 +509,7 @@ td span,
 .tabaqueira-entrada-form,
 .tabaqueira-saida-form,
 .inventario-produto-form,
+.inventario-retirada-form,
 .inventario-tipo-form,
 .dia-form,
 .agente-form,
@@ -549,8 +550,16 @@ td span,
 }
 
 .inventario-produto-form {
-  grid-template-columns: minmax(170px, 1fr) minmax(150px, 0.8fr) minmax(130px, 0.58fr) minmax(130px, 0.58fr) minmax(160px, 0.95fr) auto;
+  grid-template-columns: minmax(170px, 1fr) minmax(150px, 0.8fr) minmax(130px, 0.58fr) minmax(160px, 0.95fr) auto;
   align-items: end;
+}
+
+.inventario-retirada-form {
+  grid-template-columns: minmax(220px, 1fr) minmax(140px, 0.55fr) minmax(170px, 0.8fr) auto;
+  align-items: end;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .inventario-tipo-form {
@@ -795,6 +804,11 @@ input:disabled {
 
 .stock-tabs {
   grid-template-columns: repeat(auto-fit, minmax(160px, 220px));
+  margin-bottom: 0;
+}
+
+.inventory-tabs {
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
   margin-bottom: 0;
 }
 
@@ -1142,6 +1156,7 @@ td:first-child > span,
   .tabaqueira-entrada-form,
   .tabaqueira-saida-form,
   .inventario-produto-form,
+  .inventario-retirada-form,
   .inventario-tipo-form,
   .dia-form,
   .tipo-form,

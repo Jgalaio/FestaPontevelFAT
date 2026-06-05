@@ -872,6 +872,15 @@ export type Database = {
         };
         Returns: InventarioProduto[];
       };
+      app_registar_inventario_retirada: {
+        Args: {
+          p_token: string;
+          p_produto_id: string;
+          p_quantidade: number;
+          p_responsavel: string;
+        };
+        Returns: InventarioProduto[];
+      };
       app_apagar_inventario_produto: {
         Args: { p_token: string; p_id: string };
         Returns: null;

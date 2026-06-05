@@ -291,6 +291,7 @@ set search_path = public, extensions
 as $$
 declare
   actor record;
+  existing_produto public.inventario_produtos%rowtype;
   saved_id uuid;
   normalized_produto text;
   normalized_responsavel text;
@@ -316,12 +317,8 @@ begin
     raise exception 'Escolhe o tipo de produto' using errcode = '22023';
   end if;
 
-  if coalesce(p_quantidade_recebida, 0) < 0 or coalesce(p_quantidade_retirada, 0) < 0 then
-    raise exception 'As quantidades não podem ser negativas' using errcode = '22023';
-  end if;
-
-  if coalesce(p_quantidade_retirada, 0) > coalesce(p_quantidade_recebida, 0) then
-    raise exception 'A quantidade retirada não pode ser maior que a quantidade recebida' using errcode = '22023';
+  if coalesce(p_quantidade_recebida, 0) < 0 then
+    raise exception 'A quantidade recebida não pode ser negativa' using errcode = '22023';
   end if;
 
   if normalized_responsavel = '' then
@@ -344,19 +341,32 @@ begin
       p_tipo_id,
       tipo_nome_atual,
       coalesce(p_quantidade_recebida, 0),
-      coalesce(p_quantidade_retirada, 0),
+      0,
       normalized_responsavel,
       actor.utilizador_id,
       actor.nome
     )
     returning id into saved_id;
   else
+    select *
+    into existing_produto
+    from public.inventario_produtos
+    where id = p_id
+    limit 1;
+
+    if existing_produto.id is null then
+      raise exception 'Produto de inventário não encontrado' using errcode = '02000';
+    end if;
+
+    if existing_produto.quantidade_retirada > coalesce(p_quantidade_recebida, 0) then
+      raise exception 'A quantidade recebida não pode ficar abaixo do que já foi retirado' using errcode = '22023';
+    end if;
+
     update public.inventario_produtos
     set produto = normalized_produto,
         tipo_id = p_tipo_id,
         tipo_nome = tipo_nome_atual,
         quantidade_recebida = coalesce(p_quantidade_recebida, 0),
-        quantidade_retirada = coalesce(p_quantidade_retirada, 0),
         responsavel = normalized_responsavel,
         atualizado_por_id = actor.utilizador_id,
         atualizado_por_nome = actor.nome,
@@ -373,6 +383,63 @@ begin
   select *
   from public.inventario_produtos
   where id = saved_id;
+end;
+$$;
+
+create or replace function public.app_registar_inventario_retirada(
+  p_token text,
+  p_produto_id uuid,
+  p_quantidade numeric default 0,
+  p_responsavel text default ''
+)
+returns setof public.inventario_produtos
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  actor record;
+  produto_atual public.inventario_produtos%rowtype;
+  normalized_responsavel text;
+begin
+  select * into actor from public.app_require_actor(p_token) limit 1;
+
+  normalized_responsavel := regexp_replace(trim(coalesce(p_responsavel, '')), '[[:space:]]+', ' ', 'g');
+
+  if coalesce(p_quantidade, 0) <= 0 then
+    raise exception 'Indica uma quantidade retirada maior que zero' using errcode = '22023';
+  end if;
+
+  if normalized_responsavel = '' then
+    raise exception 'Indica o responsável pela retirada' using errcode = '22023';
+  end if;
+
+  select *
+  into produto_atual
+  from public.inventario_produtos
+  where id = p_produto_id
+  for update;
+
+  if produto_atual.id is null then
+    raise exception 'Produto de inventário não encontrado' using errcode = '02000';
+  end if;
+
+  if produto_atual.quantidade_retirada + p_quantidade > produto_atual.quantidade_recebida then
+    raise exception 'Não existe quantidade suficiente disponível para esse produto' using errcode = '22023';
+  end if;
+
+  update public.inventario_produtos
+  set quantidade_retirada = quantidade_retirada + p_quantidade,
+      responsavel = normalized_responsavel,
+      atualizado_por_id = actor.utilizador_id,
+      atualizado_por_nome = actor.nome,
+      updated_at = now()
+  where id = p_produto_id;
+
+  return query
+  select *
+  from public.inventario_produtos
+  where id = p_produto_id;
 end;
 $$;
 
