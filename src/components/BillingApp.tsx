@@ -187,6 +187,13 @@ type NotaForm = {
   texto: string;
 };
 
+type InlineRegistoForm = {
+  dinheiro: string;
+  multibanco: string;
+  mbway: string;
+  observacoes: string;
+};
+
 type NovadisValorKey =
   | "imperial_valor_unitario"
   | "cidra_valor_unitario"
@@ -443,6 +450,15 @@ function emptyForm(date = todayISO()): RegistoForm {
   return {
     postoId: "",
     data: date,
+    dinheiro: "",
+    multibanco: "",
+    mbway: "",
+    observacoes: ""
+  };
+}
+
+function emptyInlineRegistoForm(): InlineRegistoForm {
+  return {
     dinheiro: "",
     multibanco: "",
     mbway: "",
@@ -1095,6 +1111,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesa[]>(baseTiposDespesa);
   const [utilizadores, setUtilizadores] = useState<Utilizador[]>([]);
   const [editingRegisto, setEditingRegisto] = useState<Registo | null>(null);
+  const [inlineRegistoForm, setInlineRegistoForm] = useState<InlineRegistoForm>(() => emptyInlineRegistoForm());
   const [editingDespesa, setEditingDespesa] = useState<Despesa | null>(null);
   const [editingNovadisConsumoTipo, setEditingNovadisConsumoTipo] = useState<NovadisTipo | null>(null);
   const [agenteConfig, setAgenteConfig] = useState<AgenteConfig>(baseAgenteConfig);
@@ -1146,6 +1163,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [inlineRegistoSaving, setInlineRegistoSaving] = useState(false);
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [postoSaving, setPostoSaving] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
@@ -2245,15 +2263,15 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setAnotacoes([]);
     setNotaForm(emptyNotaForm());
     setNotesOpen(false);
+    setInlineRegistoForm(emptyInlineRegistoForm());
   }
 
   function handleSelectDia(value: string) {
     setEditingRegisto(null);
+    setInlineRegistoForm(emptyInlineRegistoForm());
     setEditingDespesa(null);
     setSelectedDate(value);
-    setForm((current) =>
-      isEditingRegisto ? { ...emptyForm(value), postoId: current.postoId } : { ...current, data: value }
-    );
+    setForm((current) => ({ ...current, data: value }));
     setDespesaForm((current) =>
       isEditingDespesa ? { ...emptyDespesaForm(value), postoId: current.postoId } : { ...current, data: value }
     );
@@ -2261,8 +2279,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
   function handleSelectPosto(postoId: string) {
     setEditingRegisto(null);
+    setInlineRegistoForm(emptyInlineRegistoForm());
     setEditingDespesa(null);
-    setForm((current) => (isEditingRegisto ? { ...emptyForm(current.data), postoId } : { ...current, postoId }));
+    setForm((current) => ({ ...current, postoId }));
     setDespesaForm((current) =>
       isEditingDespesa ? { ...emptyDespesaForm(current.data), postoId } : { ...current, postoId }
     );
@@ -2270,7 +2289,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
   function handleCancelEditRegisto() {
     setEditingRegisto(null);
-    setForm((current) => ({ ...emptyForm(current.data), postoId: current.postoId }));
+    setInlineRegistoForm(emptyInlineRegistoForm());
   }
 
   function handleCancelEditDespesa() {
@@ -2692,7 +2711,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     const existingRegistoForForm =
       registos.find((registo) => registo.posto_id === form.postoId && registo.data === selectedDia.data) ?? null;
 
-    if (existingRegistoForForm && !isEditingRegisto) {
+    if (existingRegistoForForm) {
       setSaving(false);
       setError("Este posto já tem faturação neste dia. Usa o botão editar para guardar alterações.");
       return;
@@ -2700,19 +2719,13 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     const descricaoAlteracao = form.observacoes.trim();
 
-    if (isEditingRegisto && !descricaoAlteracao) {
-      setSaving(false);
-      setError("Descreve o que foi alterado antes de guardar as alterações.");
-      return;
-    }
-
     const payload = {
       posto_id: form.postoId,
       data: selectedDia.data,
       dinheiro: parseMoney(form.dinheiro),
       multibanco: parseMoney(form.multibanco),
       mbway: parseMoney(form.mbway),
-      observacoes: descricaoAlteracao ? `${isEditingRegisto ? "Alteração: " : ""}${descricaoAlteracao}` : null
+      observacoes: descricaoAlteracao || null
     };
 
     if (isDemoMode) {
@@ -2739,8 +2752,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           : [...store.registos, nextRegisto];
 
       writeDemoStore({ ...store, registos: nextRegistos });
-      setNotice(isEditingRegisto ? "Alterações guardadas." : "Registo guardado.");
-      setEditingRegisto(null);
+      setNotice("Registo guardado.");
       setForm((current) => ({ ...emptyForm(current.data), postoId: current.postoId }));
       setSaving(false);
       await loadData();
@@ -2769,9 +2781,94 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    setNotice(isEditingRegisto ? "Alterações guardadas." : "Registo guardado.");
-    setEditingRegisto(null);
+    setNotice("Registo guardado.");
     setForm((current) => ({ ...emptyForm(current.data), postoId: current.postoId }));
+    await loadData();
+  }
+
+  async function handleSaveInlineRegisto(registo: Registo) {
+    const diaRegisto = diasFesta.find((dia) => dia.data === registo.data);
+
+    setInlineRegistoSaving(true);
+    setError("");
+    setNotice("");
+
+    if (diaRegisto?.fechado) {
+      setInlineRegistoSaving(false);
+      setError("Este dia está fechado e já não permite alterações.");
+      return;
+    }
+
+    const descricaoAlteracao = inlineRegistoForm.observacoes.trim();
+
+    if (!descricaoAlteracao) {
+      setInlineRegistoSaving(false);
+      setError("Descreve o que foi alterado antes de guardar as alterações.");
+      return;
+    }
+
+    const payload = {
+      posto_id: registo.posto_id,
+      data: registo.data,
+      dinheiro: parseMoney(inlineRegistoForm.dinheiro),
+      multibanco: parseMoney(inlineRegistoForm.multibanco),
+      mbway: parseMoney(inlineRegistoForm.mbway),
+      observacoes: `Alteração: ${descricaoAlteracao}`
+    };
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const existingIndex = store.registos.findIndex((item) => item.id === registo.id);
+      const existingRegisto = store.registos[existingIndex];
+
+      if (!existingRegisto) {
+        setInlineRegistoSaving(false);
+        setError("Não foi possível encontrar este registo.");
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const nextRegisto: RegistoRow = {
+        ...existingRegisto,
+        ...payload,
+        updated_at: now,
+        atualizado_por_id: null,
+        atualizado_por_nome: currentUserName
+      };
+      const nextRegistos = store.registos.map((item, index) => (index === existingIndex ? nextRegisto : item));
+
+      writeDemoStore({ ...store, registos: nextRegistos });
+      setNotice("Alterações guardadas.");
+      handleCancelEditRegisto();
+      setInlineRegistoSaving(false);
+      await loadData();
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setInlineRegistoSaving(false);
+      return;
+    }
+
+    const { error: saveError } = await supabase.rpc("app_guardar_registo", {
+      p_token: sessionToken,
+      p_posto_id: payload.posto_id,
+      p_data: payload.data,
+      p_dinheiro: payload.dinheiro,
+      p_multibanco: payload.multibanco,
+      p_mbway: payload.mbway,
+      p_observacoes: payload.observacoes
+    });
+
+    setInlineRegistoSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setNotice("Alterações guardadas.");
+    handleCancelEditRegisto();
     await loadData();
   }
 
@@ -2838,17 +2935,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setEntryTab("faturacao");
     setEditingRegisto(registo);
-    setForm({
-      postoId: registo.posto_id,
-      data: registo.data,
+    setInlineRegistoForm({
       dinheiro: String(Number(registo.dinheiro).toFixed(2)),
       multibanco: String(Number(registo.multibanco).toFixed(2)),
       mbway: String(Number(registo.mbway).toFixed(2)),
       observacoes: ""
-    });
-
-    window.requestAnimationFrame(() => {
-      document.getElementById("entry-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
@@ -6876,13 +6967,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 </div>
                 <div>
                   <p className="eyebrow">{selectedPosto?.nome ?? "Sem posto selecionado"}</p>
-                  <h2>
-                    {entryTab === "faturacao" && isEditingRegisto
-                      ? "Editar faturação"
-                      : entryTab === "faturacao"
-                        ? "Faturação"
-                        : "Despesas"}
-                  </h2>
+                  <h2>{entryTab === "faturacao" ? "Faturação" : "Despesas"}</h2>
                   {selectedPosto?.responsavel ? (
                     <span className="panel-subtitle">{selectedPosto.responsavel}</span>
                   ) : null}
@@ -6895,23 +6980,6 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     Dia
                     <input value={selectedDayLabel} readOnly disabled />
                   </label>
-
-                  {isEditingRegisto ? (
-                    <div className="edit-menu wide-field">
-                      <div>
-                        <strong>Menu de edição</strong>
-                        <span>
-                          {editingRegisto?.postos?.nome ?? selectedPosto?.nome ?? "Posto"} ·{" "}
-                          {formatDateLabel(editingRegisto?.data ?? selectedDia?.data ?? selectedDate)}
-                        </span>
-                        {editingRegisto?.observacoes ? <small>Anterior: {editingRegisto.observacoes}</small> : null}
-                      </div>
-                      <button className="icon-text-button" type="button" onClick={handleCancelEditRegisto}>
-                        <X size={18} aria-hidden="true" />
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : null}
 
               <label>
                 Dinheiro
@@ -6950,12 +7018,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </label>
 
               <label className="wide-field">
-                {isEditingRegisto ? "Descrição da alteração" : "Observações"}
+                Observações
                 <textarea
                   value={form.observacoes}
                   onChange={(event) => setForm((current) => ({ ...current, observacoes: event.target.value }))}
-                  placeholder={isEditingRegisto ? "Ex.: Corrigido o valor do dinheiro de 100,00 para 120,00" : ""}
-                  required={isEditingRegisto}
                   rows={3}
                 />
               </label>
@@ -6971,16 +7037,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     ? "Dia fechado"
                     : saving
                       ? "A guardar"
-                      : isEditingRegisto
-                        ? "Guardar alterações"
-                        : "Guardar registo"}
+                      : "Guardar registo"}
                 </button>
-                {isEditingRegisto ? (
-                  <button className="icon-text-button" type="button" onClick={handleCancelEditRegisto}>
-                    <X size={18} aria-hidden="true" />
-                    Cancelar
-                  </button>
-                ) : null}
               </div>
             </form>
           ) : (
@@ -7702,48 +7760,146 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </thead>
               <tbody>
                 {selectedRegistos.map((registo) => {
+                  const isEditingThisRegisto = editingRegisto?.id === registo.id;
                   const total =
                     Number(registo.dinheiro) + Number(registo.multibanco) + Number(registo.mbway);
+                  const inlineTotal =
+                    parseMoney(inlineRegistoForm.dinheiro) +
+                    parseMoney(inlineRegistoForm.multibanco) +
+                    parseMoney(inlineRegistoForm.mbway);
 
                   return (
-                    <tr key={registo.id}>
+                    <tr key={registo.id} className={isEditingThisRegisto ? "editing-row" : ""}>
                       <td>
                         <strong>{registo.postos?.nome ?? "Posto removido"}</strong>
                         <span>{registo.postos?.responsavel ?? ""}</span>
                       </td>
-                      <td>{formatCurrency(Number(registo.dinheiro))}</td>
-                      <td>{formatCurrency(Number(registo.multibanco))}</td>
-                      <td>{formatCurrency(Number(registo.mbway))}</td>
                       <td>
-                        <strong>{formatCurrency(total)}</strong>
+                        {isEditingThisRegisto ? (
+                          <input
+                            className="inline-table-input"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            aria-label="Dinheiro"
+                            value={inlineRegistoForm.dinheiro}
+                            onChange={(event) =>
+                              setInlineRegistoForm((current) => ({ ...current, dinheiro: event.target.value }))
+                            }
+                          />
+                        ) : (
+                          formatCurrency(Number(registo.dinheiro))
+                        )}
+                      </td>
+                      <td>
+                        {isEditingThisRegisto ? (
+                          <input
+                            className="inline-table-input"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            aria-label="Multibanco"
+                            value={inlineRegistoForm.multibanco}
+                            onChange={(event) =>
+                              setInlineRegistoForm((current) => ({ ...current, multibanco: event.target.value }))
+                            }
+                          />
+                        ) : (
+                          formatCurrency(Number(registo.multibanco))
+                        )}
+                      </td>
+                      <td>
+                        {isEditingThisRegisto ? (
+                          <input
+                            className="inline-table-input"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            aria-label="MB Way"
+                            value={inlineRegistoForm.mbway}
+                            onChange={(event) =>
+                              setInlineRegistoForm((current) => ({ ...current, mbway: event.target.value }))
+                            }
+                          />
+                        ) : (
+                          formatCurrency(Number(registo.mbway))
+                        )}
+                      </td>
+                      <td>
+                        <strong>{formatCurrency(isEditingThisRegisto ? inlineTotal : total)}</strong>
                       </td>
                       <td className="audit-cell">
                         <strong>{registo.atualizado_por_nome ?? registo.criado_por_nome ?? "Sem utilizador"}</strong>
                         <span>{formatDateTimeLabel(registo.updated_at)}</span>
                       </td>
-                      <td>{registo.observacoes || ""}</td>
+                      <td>
+                        {isEditingThisRegisto ? (
+                          <textarea
+                            className="inline-table-textarea"
+                            aria-label="Descrição da alteração"
+                            value={inlineRegistoForm.observacoes}
+                            onChange={(event) =>
+                              setInlineRegistoForm((current) => ({ ...current, observacoes: event.target.value }))
+                            }
+                            placeholder="Descrição da alteração"
+                            rows={2}
+                          />
+                        ) : (
+                          registo.observacoes || ""
+                        )}
+                      </td>
                       <td>
                         <div className="row-actions">
-                          <button
-                            className="icon-button"
-                            type="button"
-                            title="Editar"
-                            aria-label="Editar registo"
-                            onClick={() => handleEditRegisto(registo)}
-                            disabled={!canEditSelectedDay}
-                          >
-                            <Pencil size={17} aria-hidden="true" />
-                          </button>
-                          <button
-                            className="icon-button danger"
-                            type="button"
-                            title="Apagar"
-                            aria-label="Apagar registo"
-                            onClick={() => void handleDeleteRegisto(registo.id)}
-                            disabled={!canEditSelectedDay}
-                          >
-                            <Trash2 size={17} aria-hidden="true" />
-                          </button>
+                          {isEditingThisRegisto ? (
+                            <>
+                              <button
+                                className="icon-button success"
+                                type="button"
+                                title="Guardar"
+                                aria-label="Guardar alterações"
+                                onClick={() => void handleSaveInlineRegisto(registo)}
+                                disabled={inlineRegistoSaving || !canEditSelectedDay}
+                              >
+                                <Save size={17} aria-hidden="true" />
+                              </button>
+                              <button
+                                className="icon-button"
+                                type="button"
+                                title="Cancelar"
+                                aria-label="Cancelar edição"
+                                onClick={handleCancelEditRegisto}
+                                disabled={inlineRegistoSaving}
+                              >
+                                <X size={17} aria-hidden="true" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="icon-button"
+                                type="button"
+                                title="Editar"
+                                aria-label="Editar registo"
+                                onClick={() => handleEditRegisto(registo)}
+                                disabled={!canEditSelectedDay}
+                              >
+                                <Pencil size={17} aria-hidden="true" />
+                              </button>
+                              <button
+                                className="icon-button danger"
+                                type="button"
+                                title="Apagar"
+                                aria-label="Apagar registo"
+                                onClick={() => void handleDeleteRegisto(registo.id)}
+                                disabled={!canEditSelectedDay}
+                              >
+                                <Trash2 size={17} aria-hidden="true" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
