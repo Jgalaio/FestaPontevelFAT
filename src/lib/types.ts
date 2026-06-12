@@ -205,6 +205,18 @@ export type InventarioProduto = {
   updated_at: string;
 };
 
+export type Anotacao = {
+  id: string;
+  titulo: string;
+  texto: string;
+  criado_por_id: string | null;
+  criado_por_nome: string;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuditoriaRegisto = {
   id: string;
   registo_id: string | null;
@@ -587,6 +599,22 @@ export type Database = {
           }
         ];
       };
+      anotacoes: {
+        Row: Anotacao;
+        Insert: {
+          id?: string;
+          titulo: string;
+          texto: string;
+          criado_por_id?: string | null;
+          criado_por_nome: string;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Anotacao>;
+        Relationships: [];
+      };
       registos_faturacao_auditoria: {
         Row: AuditoriaRegisto;
         Insert: {
@@ -882,6 +910,23 @@ export type Database = {
         Returns: InventarioProduto[];
       };
       app_apagar_inventario_produto: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
+      };
+      app_listar_anotacoes: {
+        Args: { p_token: string };
+        Returns: Anotacao[];
+      };
+      app_guardar_anotacao: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_titulo: string;
+          p_texto: string;
+        };
+        Returns: Anotacao[];
+      };
+      app_apagar_anotacao: {
         Args: { p_token: string; p_id: string };
         Returns: null;
       };

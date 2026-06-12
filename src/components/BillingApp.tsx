@@ -30,6 +30,7 @@ import { createBrowserSupabaseClient, hasSupabaseConfig } from "@/lib/supabase";
 import { formatCurrency, formatDateLabel, formatDateTimeLabel, parseMoney, todayISO } from "@/lib/format";
 import type {
   AgenteConfig,
+  Anotacao,
   AppSession,
   Despesa,
   DespesaForm,
@@ -69,13 +70,14 @@ type DemoStore = {
   tabaqueiraSaidas: TabaqueiraSaida[];
   inventarioTipos: InventarioTipoProduto[];
   inventarioProdutos: InventarioProduto[];
+  anotacoes: Anotacao[];
 };
 
 type EntryTab = "faturacao" | "despesas";
 type SideTab = "agente" | "dias" | "postos" | "tipos" | "utilizadores";
 type StockTab = "novadis" | "tabaqueira" | "inventario";
 type InventarioTab = "consulta" | "tipos";
-type BillingAppMode = "agent" | "novadis" | "stocks" | "overview" | "register" | "management" | "reports";
+type BillingAppMode = "agent" | "notes" | "novadis" | "stocks" | "overview" | "register" | "management" | "reports";
 type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
 type BillingAppProps = {
@@ -178,6 +180,12 @@ type InventarioTipoForm = {
   id: string | null;
   nome: string;
   ativo: boolean;
+};
+
+type NotaForm = {
+  id: string | null;
+  titulo: string;
+  texto: string;
 };
 
 type NovadisValorKey =
@@ -562,6 +570,14 @@ function emptyInventarioTipoForm(): InventarioTipoForm {
   };
 }
 
+function emptyNotaForm(): NotaForm {
+  return {
+    id: null,
+    titulo: "",
+    texto: ""
+  };
+}
+
 function normalizeTabaqueiraMarca(value: string | null | undefined) {
   return (value ?? "").trim().replace(/\s+/g, " ");
 }
@@ -664,6 +680,19 @@ function normalizeInventarioProduto(produto: InventarioProduto): InventarioProdu
     atualizado_por_id: produto.atualizado_por_id ?? null,
     atualizado_por_nome: produto.atualizado_por_nome ?? null,
     updated_at: produto.updated_at ?? produto.created_at
+  };
+}
+
+function normalizeAnotacao(anotacao: Anotacao): Anotacao {
+  return {
+    ...anotacao,
+    titulo: normalizeInventoryText(anotacao.titulo),
+    texto: anotacao.texto ?? "",
+    criado_por_id: anotacao.criado_por_id ?? null,
+    criado_por_nome: anotacao.criado_por_nome ?? "Sistema",
+    atualizado_por_id: anotacao.atualizado_por_id ?? null,
+    atualizado_por_nome: anotacao.atualizado_por_nome ?? null,
+    updated_at: anotacao.updated_at ?? anotacao.created_at
   };
 }
 
@@ -863,6 +892,7 @@ function readDemoStore(): DemoStore {
       tabaqueiraSaidas: [],
       inventarioTipos: baseInventarioTipos,
       inventarioProdutos: [],
+      anotacoes: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -884,6 +914,7 @@ function readDemoStore(): DemoStore {
       tabaqueiraSaidas: [],
       inventarioTipos: baseInventarioTipos,
       inventarioProdutos: [],
+      anotacoes: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -910,6 +941,7 @@ function readDemoStore(): DemoStore {
         ? parsed.inventarioTipos.map(normalizeInventarioTipo)
         : baseInventarioTipos,
       inventarioProdutos: (parsed.inventarioProdutos ?? []).map(normalizeInventarioProduto),
+      anotacoes: (parsed.anotacoes ?? []).map(normalizeAnotacao),
       tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
@@ -927,6 +959,7 @@ function readDemoStore(): DemoStore {
       tabaqueiraSaidas: [],
       inventarioTipos: baseInventarioTipos,
       inventarioProdutos: [],
+      anotacoes: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -1045,6 +1078,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const isManagementMode = mode === "management";
   const isReportsMode = mode === "reports";
   const isAgentMode = mode === "agent";
+  const isNotesMode = mode === "notes";
   const isStocksMode = mode === "stocks" || mode === "novadis";
   const startDate = useMemo(() => todayISO(), []);
 
@@ -1073,6 +1107,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [tabaqueiraSaidas, setTabaqueiraSaidas] = useState<TabaqueiraSaida[]>([]);
   const [inventarioTipos, setInventarioTipos] = useState<InventarioTipoProduto[]>(baseInventarioTipos);
   const [inventarioProdutos, setInventarioProdutos] = useState<InventarioProduto[]>([]);
+  const [anotacoes, setAnotacoes] = useState<Anotacao[]>([]);
   const [agenteConfigForm, setAgenteConfigForm] = useState<AgenteConfigForm>(() =>
     agenteConfigToForm(baseAgenteConfig)
   );
@@ -1099,6 +1134,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     emptyInventarioRetiradaForm()
   );
   const [inventarioTipoForm, setInventarioTipoForm] = useState<InventarioTipoForm>(() => emptyInventarioTipoForm());
+  const [notaForm, setNotaForm] = useState<NotaForm>(() => emptyNotaForm());
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
   const [tipoDespesaForm, setTipoDespesaForm] = useState<TipoDespesaForm>(() => emptyTipoDespesaForm());
@@ -1107,6 +1143,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [sideTab, setSideTab] = useState<SideTab>("dias");
   const [stockTab, setStockTab] = useState<StockTab>("novadis");
   const [inventarioTab, setInventarioTab] = useState<InventarioTab>("consulta");
+  const [notesOpen, setNotesOpen] = useState(false);
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1124,6 +1161,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [inventarioProdutoSaving, setInventarioProdutoSaving] = useState(false);
   const [inventarioRetiradaSaving, setInventarioRetiradaSaving] = useState(false);
   const [inventarioTipoSaving, setInventarioTipoSaving] = useState(false);
+  const [notaSaving, setNotaSaving] = useState(false);
   const [overviewOnlyFestaTotal, setOverviewOnlyFestaTotal] = useState(false);
   const [overviewOnlyFestaSaldo, setOverviewOnlyFestaSaldo] = useState(false);
   const [notice, setNotice] = useState("");
@@ -1393,6 +1431,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const isEditingTabaqueiraSaida = Boolean(tabaqueiraSaidaForm.id);
   const isEditingInventarioProduto = Boolean(inventarioProdutoForm.id);
   const isEditingInventarioTipo = Boolean(inventarioTipoForm.id);
+  const isEditingNota = Boolean(notaForm.id);
   const agenteValoresBase =
     Number(agenteConfig.valor_eventos_anual) +
     Number(agenteConfig.valor_patrocinios) +
@@ -1536,6 +1575,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         .sort((a, b) => a.produto.localeCompare(b.produto)),
     [inventarioProdutos]
   );
+  const orderedAnotacoes = useMemo(
+    () => anotacoes.slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+    [anotacoes]
+  );
+  const topAnotacoes = orderedAnotacoes.slice(0, 5);
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
@@ -1744,6 +1788,31 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setInventarioTipos(tiposResult.data?.length ? tiposResult.data.map(normalizeInventarioTipo) : baseInventarioTipos);
     setInventarioProdutos((produtosResult.data ?? []).map(normalizeInventarioProduto));
+  }, [isDemoMode, sessionToken, supabase]);
+
+  const loadNotas = useCallback(async () => {
+    if (isDemoMode) {
+      const store = readDemoStore();
+
+      setAnotacoes((store.anotacoes ?? []).map(normalizeAnotacao));
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setAnotacoes([]);
+      return;
+    }
+
+    const { data, error: notasError } = await supabase.rpc("app_listar_anotacoes", {
+      p_token: sessionToken
+    });
+
+    if (notasError) {
+      setError(notasError.message);
+      return;
+    }
+
+    setAnotacoes((data ?? []).map(normalizeAnotacao));
   }, [isDemoMode, sessionToken, supabase]);
 
   const loadData = useCallback(async () => {
@@ -1964,6 +2033,47 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }, [isInventarioMode, isLoggedIn, loadInventarioData]);
 
   useEffect(() => {
+    if (isLoggedIn) {
+      void loadNotas();
+    }
+  }, [isLoggedIn, loadNotas]);
+
+  useEffect(() => {
+    if (!isNotesMode || typeof window === "undefined") {
+      return;
+    }
+
+    function applyNoteHash() {
+      const hash = window.location.hash.replace("#", "");
+
+      if (hash === "nova") {
+        setNotaForm(emptyNotaForm());
+        return;
+      }
+
+      if (!hash.startsWith("nota-")) {
+        return;
+      }
+
+      const noteId = hash.replace("nota-", "");
+      const nota = anotacoes.find((current) => current.id === noteId);
+
+      if (nota) {
+        setNotaForm({
+          id: nota.id,
+          titulo: nota.titulo,
+          texto: nota.texto
+        });
+      }
+    }
+
+    applyNoteHash();
+    window.addEventListener("hashchange", applyNoteHash);
+
+    return () => window.removeEventListener("hashchange", applyNoteHash);
+  }, [anotacoes, isNotesMode]);
+
+  useEffect(() => {
     setForm((current) => ({ ...current, data: selectedDate }));
     setDespesaForm((current) => ({ ...current, data: selectedDate }));
     setNovadisConsumoForm((current) => ({ ...current, data: selectedDate }));
@@ -2133,6 +2243,9 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setInventarioProdutoForm(emptyInventarioProdutoForm());
     setInventarioRetiradaForm(emptyInventarioRetiradaForm());
     setInventarioTipoForm(emptyInventarioTipoForm());
+    setAnotacoes([]);
+    setNotaForm(emptyNotaForm());
+    setNotesOpen(false);
   }
 
   function handleSelectDia(value: string) {
@@ -4185,6 +4298,140 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     await loadInventarioData();
   }
 
+  function handleCancelEditNota() {
+    setNotaForm(emptyNotaForm());
+  }
+
+  function handleEditNota(nota: Anotacao) {
+    setError("");
+    setNotice("");
+    setNotaForm({
+      id: nota.id,
+      titulo: nota.titulo,
+      texto: nota.texto
+    });
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("nota-form-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  async function handleSaveNota(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const titulo = normalizeInventoryText(notaForm.titulo);
+    const texto = notaForm.texto.trim();
+    const editingId = notaForm.id;
+
+    if (!titulo) {
+      setError("Indica o título da anotação.");
+      return;
+    }
+
+    if (!texto) {
+      setError("Escreve a anotação.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const existingIndex = editingId ? (store.anotacoes ?? []).findIndex((nota) => nota.id === editingId) : -1;
+      const existingNota = existingIndex >= 0 ? normalizeAnotacao(store.anotacoes[existingIndex]) : null;
+      const now = new Date().toISOString();
+      const nextNota: Anotacao = {
+        id: existingNota?.id ?? makeId("anotacao"),
+        titulo,
+        texto,
+        criado_por_id: existingNota?.criado_por_id ?? null,
+        criado_por_nome: existingNota?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: editingId ? null : existingNota?.atualizado_por_id ?? null,
+        atualizado_por_nome: editingId ? currentUserName : existingNota?.atualizado_por_nome ?? null,
+        created_at: existingNota?.created_at ?? now,
+        updated_at: now
+      };
+      const nextAnotacoes =
+        existingIndex >= 0
+          ? store.anotacoes.map((nota, index) => (index === existingIndex ? nextNota : nota))
+          : [nextNota, ...(store.anotacoes ?? [])];
+
+      writeDemoStore({ ...store, anotacoes: nextAnotacoes });
+      setAnotacoes(nextAnotacoes.map(normalizeAnotacao));
+      setNotaForm(emptyNotaForm());
+      setNotice(editingId ? "Anotação alterada." : "Anotação adicionada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setNotaSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_guardar_anotacao", {
+      p_token: sessionToken,
+      p_id: editingId,
+      p_titulo: titulo,
+      p_texto: texto
+    });
+
+    setNotaSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setNotaForm(emptyNotaForm());
+    setNotice(editingId ? "Anotação alterada." : "Anotação adicionada.");
+    await loadNotas();
+  }
+
+  async function handleDeleteNota(id: string) {
+    const shouldDelete = window.confirm("Apagar esta anotação?");
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextAnotacoes = (store.anotacoes ?? []).filter((nota) => nota.id !== id);
+
+      writeDemoStore({ ...store, anotacoes: nextAnotacoes });
+      setAnotacoes(nextAnotacoes.map(normalizeAnotacao));
+      if (notaForm.id === id) {
+        setNotaForm(emptyNotaForm());
+      }
+      setNotice("Anotação apagada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_anotacao", {
+      p_token: sessionToken,
+      p_id: id
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    if (notaForm.id === id) {
+      setNotaForm(emptyNotaForm());
+    }
+    setNotice("Anotação apagada.");
+    await loadNotas();
+  }
+
   async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -4333,6 +4580,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   ? "Relatórios"
                   : isAgentMode
                     ? "Pag.Agente"
+                    : isNotesMode
+                      ? "Anotações"
                     : isStocksMode
                       ? "Stocks"
                       : "Gestão"}
@@ -4340,6 +4589,64 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </div>
 
         <div className="top-actions">
+          <div className="notes-menu">
+            <button
+              className={`notes-trigger ${notesOpen ? "active" : ""}`}
+              type="button"
+              onClick={() => setNotesOpen((current) => !current)}
+              aria-expanded={notesOpen}
+            >
+              <FileText size={18} aria-hidden="true" />
+              <span>Notas</span>
+              <strong>{anotacoes.length}</strong>
+            </button>
+
+            {notesOpen ? (
+              <div className="notes-dropdown">
+                <div className="notes-dropdown-heading">
+                  <strong>Anotações</strong>
+                  <Link className="icon-text-button table-action" href="/anotacoes#nova" onClick={() => setNotesOpen(false)}>
+                    <Plus size={16} aria-hidden="true" />
+                    Adicionar
+                  </Link>
+                </div>
+
+                {topAnotacoes.length ? (
+                  <div className="notes-preview-list">
+                    {topAnotacoes.map((nota) => (
+                      <div className="notes-preview-item" key={nota.id}>
+                        <Link href={`/anotacoes#nota-${nota.id}`} onClick={() => setNotesOpen(false)}>
+                          <strong>{nota.titulo}</strong>
+                          <span>{nota.texto}</span>
+                        </Link>
+                        <div className="row-actions">
+                          <Link
+                            className="icon-button"
+                            href={`/anotacoes#nota-${nota.id}`}
+                            aria-label="Editar anotação"
+                            onClick={() => setNotesOpen(false)}
+                          >
+                            <Pencil size={15} aria-hidden="true" />
+                          </Link>
+                          <button
+                            className="icon-button danger"
+                            type="button"
+                            aria-label="Apagar anotação"
+                            onClick={() => void handleDeleteNota(nota.id)}
+                          >
+                            <Trash2 size={15} aria-hidden="true" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="notes-empty">Sem anotações.</div>
+                )}
+              </div>
+            ) : null}
+          </div>
+
           {isRegisterMode || isReportsMode ? (
             <label className="date-control">
               <CalendarDays size={18} aria-hidden="true" />
@@ -4393,6 +4700,112 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           Gestão
         </Link>
       </nav>
+
+      {isNotesMode ? (
+        <>
+          <section className="summary-grid" aria-label="Resumo das anotações">
+            <article className="metric metric-total">
+              <span>Anotações</span>
+              <strong>{anotacoes.length}</strong>
+              <small>{topAnotacoes.length} visíveis no topo</small>
+            </article>
+            <article className="metric metric-total">
+              <span>Última atualização</span>
+              <strong>{orderedAnotacoes[0] ? formatDateTimeLabel(orderedAnotacoes[0].updated_at) : "Sem notas"}</strong>
+              <small>{orderedAnotacoes[0]?.atualizado_por_nome ?? orderedAnotacoes[0]?.criado_por_nome ?? "Sistema"}</small>
+            </article>
+          </section>
+
+          <section className="panel" id="nota-form-panel">
+            <div className="panel-heading table-heading">
+              <div className="panel-heading-inline">
+                <div className="heading-icon">
+                  <FileText size={20} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="eyebrow">Notas</p>
+                  <h2>{isEditingNota ? "Editar anotação" : "Adicionar anotação"}</h2>
+                </div>
+              </div>
+              {isEditingNota ? (
+                <button className="icon-text-button" type="button" onClick={handleCancelEditNota}>
+                  <X size={18} aria-hidden="true" />
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
+
+            <form className="nota-form" onSubmit={handleSaveNota}>
+              <label>
+                Título
+                <input
+                  type="text"
+                  value={notaForm.titulo}
+                  onChange={(event) => setNotaForm((current) => ({ ...current, titulo: event.target.value }))}
+                  placeholder="Título da anotação"
+                  required
+                  disabled={notaSaving}
+                />
+              </label>
+              <label className="wide-field">
+                Anotação
+                <textarea
+                  value={notaForm.texto}
+                  onChange={(event) => setNotaForm((current) => ({ ...current, texto: event.target.value }))}
+                  placeholder="Escreve a anotação"
+                  required
+                  disabled={notaSaving}
+                />
+              </label>
+              <button className="primary-button" type="submit" disabled={notaSaving}>
+                <Save size={18} aria-hidden="true" />
+                {notaSaving ? "A guardar" : isEditingNota ? "Guardar alteração" : "Adicionar"}
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Notas</p>
+                <h2>Anotações registadas</h2>
+              </div>
+            </div>
+
+            {orderedAnotacoes.length ? (
+              <div className="notes-list">
+                {orderedAnotacoes.map((nota) => (
+                  <article className="note-card" id={`nota-${nota.id}`} key={nota.id}>
+                    <div>
+                      <strong>{nota.titulo}</strong>
+                      <p>{nota.texto}</p>
+                      <span>
+                        {formatDateTimeLabel(nota.updated_at)} ·{" "}
+                        {nota.atualizado_por_nome ?? nota.criado_por_nome}
+                      </span>
+                    </div>
+                    <div className="row-actions">
+                      <button className="icon-button" type="button" aria-label="Editar anotação" onClick={() => handleEditNota(nota)}>
+                        <Pencil size={16} aria-hidden="true" />
+                      </button>
+                      <button
+                        className="icon-button danger"
+                        type="button"
+                        aria-label="Apagar anotação"
+                        onClick={() => void handleDeleteNota(nota.id)}
+                      >
+                        <Trash2 size={16} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem anotações.</div>
+            )}
+          </section>
+        </>
+      ) : null}
 
       {isOverviewMode ? (
         <section className="summary-grid" aria-label="Totais da festa">
@@ -6421,7 +6834,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </section>
       ) : null}
 
-      {!isOverviewMode && !isReportsMode && !isAgentMode && !isStocksMode ? (
+      {!isOverviewMode && !isReportsMode && !isAgentMode && !isNotesMode && !isStocksMode ? (
         <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
           {isRegisterMode ? (
             <section className="panel entry-panel" id="entry-panel">

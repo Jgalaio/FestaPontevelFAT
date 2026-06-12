@@ -1,7 +1,7 @@
 # Faturação Pontevel
 
 Sistema web para registo diário da faturação da Festa de Pontével por posto.
-Inclui overview global, registo por posto, gestão, Pag.Agente, Stocks com Novadis, Tabaqueira, Inventário e relatório diário pronto para impressão.
+Inclui overview global, registo por posto, gestão, Pag.Agente, Notas, Stocks com Novadis, Tabaqueira, Inventário e relatório diário pronto para impressão.
 
 ## Stack
 
@@ -24,7 +24,7 @@ Sem variáveis Supabase, a app abre em modo de demonstração e guarda dados no 
 
 1. Criar um projeto no Supabase.
 2. Abrir `SQL Editor`.
-3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql`, `supabase/add-pag-agente.sql`, `supabase/admin-delete-guard.sql`, `supabase/add-novadis.sql`, `supabase/add-tabaqueira.sql` e `supabase/add-inventario.sql`.
+3. Executar o ficheiro `supabase/schema.sql`, depois `supabase/add-dias-festa.sql`, `supabase/add-pagamento-despesas.sql`, `supabase/auto-numero-despesas.sql`, `supabase/add-imagem-fatura-despesas.sql`, `supabase/add-pag-agente.sql`, `supabase/admin-delete-guard.sql`, `supabase/add-novadis.sql`, `supabase/add-tabaqueira.sql`, `supabase/add-inventario.sql` e `supabase/add-anotacoes.sql`.
 4. Copiar `Project URL` e a `publishable key`.
 
 Depois preencher:
@@ -53,6 +53,7 @@ supabase/admin-delete-guard.sql
 supabase/add-novadis.sql
 supabase/add-tabaqueira.sql
 supabase/add-inventario.sql
+supabase/add-anotacoes.sql
 ```
 
 Essa atualização cria:
@@ -68,6 +69,7 @@ Essa atualização cria:
 - `novadis_config`, `novadis_barris` e `novadis_consumos`, com valor unitário/tara por tipo, histórico recebido e gasto diário
 - `tabaqueira_entradas` e `tabaqueira_saidas`, com stock recebido, preço fornecedor, PVP, saídas por dia/posto e correções de admin
 - `inventario_tipos_produto` e `inventario_produtos`, com tipos, produto, quantidades recebidas/retiradas e responsável
+- `anotacoes`, com notas partilhadas, criador e última alteração
 - campos `criado_por_*` e `atualizado_por_*` em `registos_faturacao`
 - `registos_faturacao_auditoria`, com histórico de criar, editar e apagar
 - funções RPC para login, faturação, despesas, pagamentos, dias, postos, stocks e gestão de utilizadores
@@ -113,6 +115,7 @@ git push -u origin main
 - `tabaqueira_saidas`: dia da festa, marca, quantidade saída, quem levou, posto de destino, edição justificada e utilizadores envolvidos
 - `inventario_tipos_produto`: tipos de produto usados no inventário
 - `inventario_produtos`: produto, tipo, quantidades recebidas/retiradas, responsável e utilizadores envolvidos
+- `anotacoes`: título, texto, criador e última alteração
 - `registos_faturacao_auditoria`: histórico de criação, edição e remoção
 - `totais_diarios`: vista agregada com totais por dia
 
@@ -123,6 +126,8 @@ Os valores da Novadis são apresentados em `Stocks > Novadis` e não entram nos 
 A Tabaqueira fica em `Stocks > Tabaqueira`. Permite registar receções por marca, quantidade, preço fornecedor e PVP, e controlar saídas por dia da festa, marca, pessoa que levou e posto de destino. Apenas utilizadores `admin` podem corrigir ou apagar receções; saídas podem ser editadas com justificação e apagadas por `admin`.
 
 O Inventário fica em `Stocks > Inventário`. Tem as abas `Inserir/Consulta` e `Tipos/Criação`: na primeira registas produtos recebidos, consultas stock e fazes retiradas escolhendo o produto e a quantidade; na segunda crias e editas tipos de produto. Produtos podem ser corrigidos pela equipa e apagados por `admin`.
+
+As Notas ficam no topo da app. O botão `Notas` abre as primeiras 5 anotações e permite adicionar, editar, apagar e abrir a página completa em `/anotacoes`.
 
 ## Próximos passos recomendados
 
