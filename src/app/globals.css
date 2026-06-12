@@ -94,6 +94,8 @@ button:disabled {
 }
 
 .topbar {
+  position: relative;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -176,7 +178,7 @@ button:disabled {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 20;
+  z-index: 120;
   width: min(420px, calc(100vw - 28px));
   padding: 12px;
   border: 1px solid var(--line);
@@ -242,6 +244,8 @@ button:disabled {
 }
 
 .app-nav {
+  position: relative;
+  z-index: 10;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
@@ -966,6 +970,15 @@ input:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.66);
+  font-size: 0.88rem;
+}
+
+.dia-row:nth-child(even),
+.posto-row:nth-child(even),
+.tipo-row:nth-child(even),
+.user-row:nth-child(even),
+.note-card:nth-child(even) {
+  background: rgba(239, 245, 255, 0.78);
 }
 
 .dia-row > div:first-child,
@@ -1050,21 +1063,30 @@ tbody tr {
   border-bottom: 1px solid var(--line);
 }
 
+tbody tr:nth-child(even) {
+  background: rgba(239, 245, 255, 0.7);
+}
+
+tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 th,
 td {
-  padding: 14px 12px;
+  padding: 10px 9px;
   text-align: left;
   vertical-align: middle;
 }
 
 th {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
 }
 
 td {
-  font-size: 0.94rem;
+  font-size: 0.85rem;
+  line-height: 1.25;
 }
 
 td:first-child > strong,

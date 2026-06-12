@@ -22,7 +22,6 @@ import {
   Settings,
   Tags,
   Trash2,
-  UserRound,
   Users,
   X
 } from "lucide-react";
@@ -74,7 +73,7 @@ type DemoStore = {
 };
 
 type EntryTab = "faturacao" | "despesas";
-type SideTab = "agente" | "dias" | "postos" | "tipos" | "utilizadores";
+type SideTab = "admin" | "agente" | "dias" | "postos" | "tipos";
 type StockTab = "novadis" | "tabaqueira" | "inventario";
 type InventarioTab = "consulta" | "tipos";
 type BillingAppMode = "agent" | "notes" | "novadis" | "stocks" | "overview" | "register" | "management" | "reports";
@@ -2081,7 +2080,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }, [selectedDate]);
 
   useEffect(() => {
-    if (isLoggedIn && sideTab === "utilizadores" && canManageUsers) {
+    if (isLoggedIn && sideTab === "admin" && canManageUsers) {
       void loadUsers();
     }
   }, [canManageUsers, isLoggedIn, loadUsers, sideTab]);
@@ -7206,12 +7205,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   Tipos
                 </button>
                 <button
-                  className={`tab-button ${sideTab === "utilizadores" ? "active" : ""}`}
+                  className={`tab-button ${sideTab === "admin" ? "active" : ""}`}
                   type="button"
-                  onClick={() => setSideTab("utilizadores")}
+                  onClick={() => setSideTab("admin")}
                 >
-                  <Users size={18} aria-hidden="true" />
-                  Utilizadores
+                  <KeyRound size={18} aria-hidden="true" />
+                  Admin
                 </button>
               </div>
 
@@ -7561,11 +7560,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             <>
               <div className="panel-heading">
                 <div className="heading-icon">
-                  <UserRound size={20} aria-hidden="true" />
+                  <Users size={20} aria-hidden="true" />
                 </div>
                 <div>
-                  <p className="eyebrow">Equipa</p>
-                  <h2>Criação e edição</h2>
+                  <p className="eyebrow">Admin</p>
+                  <h2>Utilizadores</h2>
                 </div>
               </div>
 
