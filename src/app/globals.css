@@ -832,6 +832,67 @@ input:disabled {
   object-fit: cover;
 }
 
+.admin-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.admin-card-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.admin-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.admin-card span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.favicon-preview {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  object-fit: contain;
+}
+
+.favicon-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-button {
+  position: relative;
+  cursor: pointer;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
 .invoice-thumb {
   width: 38px;
   height: 38px;
@@ -1389,6 +1450,17 @@ td:first-child > span,
   .notes-trigger,
   .date-control,
   .icon-text-button {
+    width: 100%;
+  }
+
+  .admin-card,
+  .favicon-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .favicon-actions .icon-text-button,
+  .file-button {
     width: 100%;
   }
 

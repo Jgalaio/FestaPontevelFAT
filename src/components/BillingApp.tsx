@@ -11,6 +11,7 @@ import {
   FileText,
   HandCoins,
   Home,
+  Image as ImageIcon,
   KeyRound,
   LogOut,
   Pencil,
@@ -30,6 +31,7 @@ import { formatCurrency, formatDateLabel, formatDateTimeLabel, parseMoney, today
 import type {
   AgenteConfig,
   Anotacao,
+  AppConfig,
   AppSession,
   Despesa,
   DespesaForm,
@@ -55,6 +57,7 @@ import type {
 } from "@/lib/types";
 
 type DemoStore = {
+  appConfig: AppConfig;
   diasFesta: DiaFesta[];
   postos: Posto[];
   registos: RegistoRow[];
@@ -206,6 +209,10 @@ const STORAGE_KEY = "pontevel-faturacao-mvp";
 const DEMO_OPERATOR_KEY = "pontevel-faturacao-operador";
 const APP_SESSION_KEY = "pontevel-faturacao-sessao";
 const DELETE_DAY_PASSWORD = "21051986Gz!";
+const DEFAULT_FAVICON_HREF = "/icon.svg";
+const MAX_FAVICON_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_FAVICON_INLINE_BYTES = 512 * 1024;
+const FAVICON_IMAGE_MAX_SIDE = 256;
 const MAX_INVOICE_IMAGE_BYTES = 8 * 1024 * 1024;
 const INVOICE_IMAGE_MAX_SIDE = 1400;
 
@@ -356,6 +363,15 @@ const baseNovadisConfig: NovadisConfig = {
   updated_at: "2026-06-03T00:00:00.000Z"
 };
 
+const baseAppConfig: AppConfig = {
+  id: true,
+  favicon_data_url: null,
+  atualizado_por_id: null,
+  atualizado_por_nome: "Sistema",
+  created_at: "2026-06-03T00:00:00.000Z",
+  updated_at: "2026-06-03T00:00:00.000Z"
+};
+
 function normalizeAgenteConfig(config?: Partial<AgenteConfig> | null): AgenteConfig {
   return {
     ...baseAgenteConfig,
@@ -386,6 +402,14 @@ function normalizeNovadisConfig(config?: Partial<NovadisConfig> | null): Novadis
     sangria_valor_tara: Number(config?.sangria_valor_tara ?? 0),
     co2_valor_unitario: Number(config?.co2_valor_unitario ?? 0),
     co2_valor_tara: Number(config?.co2_valor_tara ?? 0)
+  };
+}
+
+function normalizeAppConfig(config?: Partial<AppConfig> | null): AppConfig {
+  return {
+    ...baseAppConfig,
+    ...config,
+    favicon_data_url: config?.favicon_data_url || null
   };
 }
 
@@ -444,6 +468,73 @@ async function prepareInvoiceImage(file: File) {
   context.drawImage(image, 0, 0, width, height);
 
   return canvas.toDataURL("image/jpeg", 0.78);
+}
+
+async function prepareFaviconImage(file: File) {
+  const fileName = file.name.toLowerCase();
+  const fileType = file.type.toLowerCase();
+  const isSvg = fileType === "image/svg+xml" || fileName.endsWith(".svg");
+  const isIco =
+    fileType === "image/x-icon" ||
+    fileType === "image/vnd.microsoft.icon" ||
+    fileName.endsWith(".ico");
+
+  if (!fileType.startsWith("image/") && !isIco) {
+    throw new Error("Escolhe uma imagem para o favicon.");
+  }
+
+  if (isSvg || isIco) {
+    if (file.size > MAX_FAVICON_INLINE_BYTES) {
+      throw new Error("O favicon SVG/ICO deve ter no máximo 512 KB.");
+    }
+
+    return readFileAsDataUrl(file);
+  }
+
+  if (file.size > MAX_FAVICON_IMAGE_BYTES) {
+    throw new Error("A imagem do favicon deve ter no máximo 3 MB.");
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await loadImage(dataUrl);
+  const maxSide = Math.max(image.naturalWidth, image.naturalHeight);
+  const scale = maxSide > FAVICON_IMAGE_MAX_SIDE ? FAVICON_IMAGE_MAX_SIDE / maxSide : 1;
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return dataUrl;
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+  context.clearRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL("image/png");
+}
+
+function applyDocumentFavicon(faviconDataUrl: string | null | undefined) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const href = faviconDataUrl || DEFAULT_FAVICON_HREF;
+  const head = document.head;
+  let link =
+    head.querySelector<HTMLLinkElement>('link[data-festasoft-favicon="true"]') ??
+    head.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    head.appendChild(link);
+  }
+
+  link.setAttribute("data-festasoft-favicon", "true");
+  link.href = href;
 }
 
 function emptyForm(date = todayISO()): RegistoForm {
@@ -894,6 +985,7 @@ function getNextDespesaNumber(despesas: Pick<DespesaRow, "data" | "numero_despes
 function readDemoStore(): DemoStore {
   if (typeof window === "undefined") {
     return {
+      appConfig: normalizeAppConfig(baseAppConfig),
       agenteConfig: normalizeAgenteConfig(baseAgenteConfig),
       novadisConfig: normalizeNovadisConfig(baseNovadisConfig),
       diasFesta: baseDiasFesta,
@@ -916,6 +1008,7 @@ function readDemoStore(): DemoStore {
 
   if (!raw) {
     return {
+      appConfig: normalizeAppConfig(baseAppConfig),
       agenteConfig: normalizeAgenteConfig(baseAgenteConfig),
       novadisConfig: normalizeNovadisConfig(baseNovadisConfig),
       diasFesta: baseDiasFesta,
@@ -942,6 +1035,7 @@ function readDemoStore(): DemoStore {
 
     return {
       diasFesta,
+      appConfig: normalizeAppConfig(parsed.appConfig),
       agenteConfig: normalizeAgenteConfig(parsed.agenteConfig),
       novadisConfig: normalizeNovadisConfig(parsed.novadisConfig),
       postos: parsed.postos?.length ? parsed.postos : basePostos,
@@ -961,6 +1055,7 @@ function readDemoStore(): DemoStore {
     };
   } catch {
     return {
+      appConfig: normalizeAppConfig(baseAppConfig),
       agenteConfig: normalizeAgenteConfig(baseAgenteConfig),
       novadisConfig: normalizeNovadisConfig(baseNovadisConfig),
       diasFesta: baseDiasFesta,
@@ -1114,6 +1209,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [inlineRegistoForm, setInlineRegistoForm] = useState<InlineRegistoForm>(() => emptyInlineRegistoForm());
   const [editingDespesa, setEditingDespesa] = useState<Despesa | null>(null);
   const [editingNovadisConsumoTipo, setEditingNovadisConsumoTipo] = useState<NovadisTipo | null>(null);
+  const [appConfig, setAppConfig] = useState<AppConfig>(() => normalizeAppConfig(baseAppConfig));
   const [agenteConfig, setAgenteConfig] = useState<AgenteConfig>(baseAgenteConfig);
   const [pagamentosAgente, setPagamentosAgente] = useState<PagamentoAgente[]>([]);
   const [novadisConfig, setNovadisConfig] = useState<NovadisConfig>(baseNovadisConfig);
@@ -1164,6 +1260,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [inlineRegistoSaving, setInlineRegistoSaving] = useState(false);
+  const [faviconSaving, setFaviconSaving] = useState(false);
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [postoSaving, setPostoSaving] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
@@ -1604,6 +1701,36 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const canManageUsers = isDemoMode || appSession?.role === "admin";
   const canDeleteData = isDemoMode || appSession?.role === "admin";
 
+  const loadAppConfig = useCallback(async () => {
+    if (isDemoMode) {
+      const nextConfig = normalizeAppConfig(readDemoStore().appConfig);
+
+      setAppConfig(nextConfig);
+      applyDocumentFavicon(nextConfig.favicon_data_url);
+      return;
+    }
+
+    if (!supabase) {
+      const nextConfig = normalizeAppConfig(baseAppConfig);
+
+      setAppConfig(nextConfig);
+      applyDocumentFavicon(nextConfig.favicon_data_url);
+      return;
+    }
+
+    const { data, error: configError } = await supabase.rpc("app_obter_config_publica", {});
+
+    if (configError) {
+      applyDocumentFavicon(null);
+      return;
+    }
+
+    const nextConfig = normalizeAppConfig(data?.[0]);
+
+    setAppConfig(nextConfig);
+    applyDocumentFavicon(nextConfig.favicon_data_url);
+  }, [isDemoMode, supabase]);
+
   const loadUsers = useCallback(async () => {
     if (isDemoMode) {
       setUtilizadores([
@@ -2018,6 +2145,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     void validateStoredSession();
   }, [supabase]);
+
+  useEffect(() => {
+    void loadAppConfig();
+  }, [loadAppConfig]);
+
+  useEffect(() => {
+    applyDocumentFavicon(appConfig.favicon_data_url);
+  }, [appConfig.favicon_data_url]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -4600,6 +4735,82 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       ativo: user.ativo,
       role: user.role
     });
+  }
+
+  async function handleSaveFavicon(faviconDataUrl: string | null) {
+    setError("");
+    setNotice("");
+
+    if (!canManageUsers) {
+      setError("Apenas administradores podem alterar o favicon.");
+      return;
+    }
+
+    setFaviconSaving(true);
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const now = new Date().toISOString();
+      const nextConfig = normalizeAppConfig({
+        ...store.appConfig,
+        favicon_data_url: faviconDataUrl,
+        atualizado_por_id: null,
+        atualizado_por_nome: currentUserName,
+        updated_at: now
+      });
+
+      writeDemoStore({ ...store, appConfig: nextConfig });
+      setAppConfig(nextConfig);
+      applyDocumentFavicon(nextConfig.favicon_data_url);
+      setFaviconSaving(false);
+      setNotice(faviconDataUrl ? "Favicon atualizado." : "Favicon reposto para o padrão.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setFaviconSaving(false);
+      return;
+    }
+
+    const { data, error: saveError } = await supabase.rpc("app_guardar_favicon", {
+      p_token: sessionToken,
+      p_favicon_data_url: faviconDataUrl
+    });
+
+    setFaviconSaving(false);
+
+    if (saveError || !data?.[0]) {
+      setError(saveError?.message ?? "Não foi possível guardar o favicon.");
+      return;
+    }
+
+    const nextConfig = normalizeAppConfig(data[0]);
+
+    setAppConfig(nextConfig);
+    applyDocumentFavicon(nextConfig.favicon_data_url);
+    setNotice(faviconDataUrl ? "Favicon atualizado." : "Favicon reposto para o padrão.");
+  }
+
+  async function handleFaviconFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const faviconDataUrl = await prepareFaviconImage(file);
+
+      await handleSaveFavicon(faviconDataUrl);
+    } catch (faviconError) {
+      setError(faviconError instanceof Error ? faviconError.message : "Não foi possível preparar o favicon.");
+    } finally {
+      input.value = "";
+    }
   }
 
   if (authLoading) {
@@ -7622,8 +7833,51 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                 </div>
                 <div>
                   <p className="eyebrow">Admin</p>
-                  <h2>Utilizadores</h2>
+                  <h2>Utilizadores e aparência</h2>
                 </div>
+              </div>
+
+              <div className="admin-card">
+                <div className="admin-card-main">
+                  <img
+                    className="favicon-preview"
+                    src={appConfig.favicon_data_url ?? DEFAULT_FAVICON_HREF}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="eyebrow">Favicon</p>
+                    <h3>Ícone da aplicação</h3>
+                    <span>
+                      Atualizado por {appConfig.atualizado_por_nome ?? "Sistema"} ·{" "}
+                      {formatDateTimeLabel(appConfig.updated_at)}
+                    </span>
+                  </div>
+                </div>
+
+                {canManageUsers ? (
+                  <div className="favicon-actions">
+                    <label className="icon-text-button file-button">
+                      <ImageIcon size={18} aria-hidden="true" />
+                      Escolher imagem
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico"
+                        onChange={(event) => void handleFaviconFileChange(event)}
+                        disabled={faviconSaving}
+                      />
+                    </label>
+                    <button
+                      className="icon-text-button"
+                      type="button"
+                      onClick={() => void handleSaveFavicon(null)}
+                      disabled={faviconSaving || !appConfig.favicon_data_url}
+                    >
+                      <X size={18} aria-hidden="true" />
+                      Repor padrão
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               {canManageUsers ? (

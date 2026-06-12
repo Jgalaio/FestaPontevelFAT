@@ -127,6 +127,15 @@ export type NovadisConfig = {
   updated_at: string;
 };
 
+export type AppConfig = {
+  id: boolean;
+  favicon_data_url: string | null;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type NovadisBarril = {
   id: string;
   tipo: NovadisTipo;
@@ -483,6 +492,19 @@ export type Database = {
         Update: Partial<NovadisConfig>;
         Relationships: [];
       };
+      app_config: {
+        Row: AppConfig;
+        Insert: {
+          id?: boolean;
+          favicon_data_url?: string | null;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<AppConfig>;
+        Relationships: [];
+      };
       novadis_barris: {
         Row: NovadisBarril;
         Insert: {
@@ -666,6 +688,10 @@ export type Database = {
         Args: { p_token: string; p_id: string };
         Returns: null;
       };
+      app_obter_config_publica: {
+        Args: Record<string, never>;
+        Returns: AppConfig[];
+      };
       app_criar_posto: {
         Args: { p_token: string; p_nome: string; p_responsavel?: string | null };
         Returns: Posto[];
@@ -726,6 +752,13 @@ export type Database = {
           p_observacoes?: string | null;
         };
         Returns: string;
+      };
+      app_guardar_favicon: {
+        Args: {
+          p_token: string;
+          p_favicon_data_url?: string | null;
+        };
+        Returns: AppConfig[];
       };
       app_guardar_utilizador: {
         Args: {
