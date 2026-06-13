@@ -516,25 +516,51 @@ async function prepareFaviconImage(file: File) {
   return canvas.toDataURL("image/png");
 }
 
+function getFaviconType(href: string) {
+  const dataUrlType = href.match(/^data:([^;,]+)/)?.[1];
+
+  if (dataUrlType) {
+    return dataUrlType;
+  }
+
+  if (href.endsWith(".svg")) {
+    return "image/svg+xml";
+  }
+
+  if (href.endsWith(".ico")) {
+    return "image/x-icon";
+  }
+
+  return "image/png";
+}
+
 function applyDocumentFavicon(faviconDataUrl: string | null | undefined) {
   if (typeof document === "undefined") {
     return;
   }
 
-  const href = faviconDataUrl || DEFAULT_FAVICON_HREF;
   const head = document.head;
-  let link =
-    head.querySelector<HTMLLinkElement>('link[data-festasoft-favicon="true"]') ??
-    head.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+  const baseHref = faviconDataUrl || DEFAULT_FAVICON_HREF;
+  const href = baseHref.startsWith("data:") ? baseHref : `${baseHref}?v=${Date.now()}`;
+  const type = getFaviconType(baseHref);
 
-  if (!link) {
-    link = document.createElement("link");
-    link.rel = "icon";
+  head.querySelectorAll<HTMLLinkElement>("link[rel]").forEach((link) => {
+    const rel = link.rel.toLowerCase();
+
+    if (link.dataset.festasoftFavicon === "true" || rel.includes("icon")) {
+      link.remove();
+    }
+  });
+
+  for (const rel of ["icon", "shortcut icon"]) {
+    const link = document.createElement("link");
+
+    link.rel = rel;
+    link.type = type;
+    link.href = href;
+    link.setAttribute("data-festasoft-favicon", "true");
     head.appendChild(link);
   }
-
-  link.setAttribute("data-festasoft-favicon", "true");
-  link.href = href;
 }
 
 function emptyForm(date = todayISO()): RegistoForm {
