@@ -326,6 +326,10 @@ const baseDiasFesta: DiaFesta[] = [
     fechado_por_id: null,
     fechado_por_nome: null,
     fechado_at: null,
+    reaberto_por_id: null,
+    reaberto_por_nome: null,
+    reaberto_at: null,
+    reabertura_justificacao: null,
     criado_por_id: null,
     criado_por_nome: "Sistema",
     atualizado_por_id: null,
@@ -410,6 +414,18 @@ function normalizeAppConfig(config?: Partial<AppConfig> | null): AppConfig {
     ...baseAppConfig,
     ...config,
     favicon_data_url: config?.favicon_data_url || null
+  };
+}
+
+function normalizeDiaFesta(dia: DiaFesta): DiaFesta {
+  return {
+    ...dia,
+    fechado: Boolean(dia.fechado),
+    reaberto_por_id: dia.reaberto_por_id ?? null,
+    reaberto_por_nome: dia.reaberto_por_nome ?? null,
+    reaberto_at: dia.reaberto_at ?? null,
+    reabertura_justificacao: dia.reabertura_justificacao ?? null,
+    updated_at: dia.updated_at ?? dia.created_at
   };
 }
 
@@ -945,6 +961,10 @@ function buildDemoDias(registos: RegistoRow[], despesas: DespesaRow[]) {
     fechado_por_id: null,
     fechado_por_nome: null,
     fechado_at: null,
+    reaberto_por_id: null,
+    reaberto_por_nome: null,
+    reaberto_at: null,
+    reabertura_justificacao: null,
     criado_por_id: null,
     criado_por_nome: "Sistema",
     atualizado_por_id: null,
@@ -1057,7 +1077,9 @@ function readDemoStore(): DemoStore {
     const parsed = JSON.parse(raw) as Partial<DemoStore>;
     const registos = parsed.registos ?? [];
     const despesas = (parsed.despesas ?? []).map(normalizeDespesaRow);
-    const diasFesta = parsed.diasFesta?.length ? sortDiasFesta(parsed.diasFesta) : buildDemoDias(registos, despesas);
+    const diasFesta = parsed.diasFesta?.length
+      ? sortDiasFesta(parsed.diasFesta.map(normalizeDiaFesta))
+      : buildDemoDias(registos, despesas);
 
     return {
       diasFesta,
@@ -1991,7 +2013,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     if (isDemoMode) {
       const store = readDemoStore();
       writeDemoStore(store);
-      const nextDias = sortDiasFesta(store.diasFesta);
+      const nextDias = sortDiasFesta(store.diasFesta.map(normalizeDiaFesta));
       const effectiveDate = resolveSelectedDate(nextDias, selectedDate);
 
       setDiasFesta(nextDias);
@@ -2039,7 +2061,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    const nextDias = sortDiasFesta(diasResult.data ?? []);
+    const nextDias = sortDiasFesta((diasResult.data ?? []).map(normalizeDiaFesta));
     const effectiveDate = resolveSelectedDate(nextDias, selectedDate);
 
     setDiasFesta(nextDias);
@@ -2488,6 +2510,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         fechado_por_id: null,
         fechado_por_nome: null,
         fechado_at: null,
+        reaberto_por_id: null,
+        reaberto_por_nome: null,
+        reaberto_at: null,
+        reabertura_justificacao: null,
         criado_por_id: null,
         criado_por_nome: currentUserName,
         atualizado_por_id: null,
@@ -2522,7 +2548,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    const savedDia = data[0];
+    const savedDia = normalizeDiaFesta(data[0]);
 
     setDiaForm(emptyDiaForm(diaForm.data));
     setDiasFesta((current) =>
@@ -2584,6 +2610,79 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     }
 
     setNotice("Dia fechado.");
+    await loadData();
+  }
+
+  async function handleReopenDia(dia: DiaFesta) {
+    if (!dia.fechado) {
+      return;
+    }
+
+    if (!canManageUsers) {
+      setError("Apenas administradores podem reabrir dias.");
+      return;
+    }
+
+    const justificacao = window.prompt(`Justificação para reabrir "${dia.nome}"`);
+
+    if (justificacao === null) {
+      return;
+    }
+
+    const normalizedJustificacao = justificacao.trim();
+
+    if (!normalizedJustificacao) {
+      setError("Indica a justificação para reabrir o dia.");
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const now = new Date().toISOString();
+      const nextDias = sortDiasFesta(
+        store.diasFesta.map((item) =>
+          item.id === dia.id
+            ? {
+                ...normalizeDiaFesta(item),
+                fechado: false,
+                reaberto_por_id: null,
+                reaberto_por_nome: currentUserName,
+                reaberto_at: now,
+                reabertura_justificacao: normalizedJustificacao,
+                atualizado_por_id: null,
+                atualizado_por_nome: currentUserName,
+                updated_at: now
+              }
+            : normalizeDiaFesta(item)
+        )
+      );
+
+      writeDemoStore({ ...store, diasFesta: nextDias });
+      setDiasFesta(nextDias);
+      setNotice("Dia reaberto.");
+      await loadData();
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: reopenError } = await supabase.rpc("app_reabrir_dia", {
+      p_token: sessionToken,
+      p_id: dia.id,
+      p_justificacao: normalizedJustificacao
+    });
+
+    if (reopenError) {
+      setError(reopenError.message);
+      return;
+    }
+
+    setNotice("Dia reaberto.");
     await loadData();
   }
 
@@ -7555,19 +7654,37 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                         <strong>{dia.nome}</strong>
                         <span>
                           {formatDateLabel(dia.data)} · {dia.fechado ? "fechado" : "aberto"}
-                          {dia.fechado_por_nome ? ` por ${dia.fechado_por_nome}` : ""}
+                          {dia.fechado && dia.fechado_por_nome ? ` por ${dia.fechado_por_nome}` : ""}
                         </span>
+                        {dia.reaberto_at ? (
+                          <small>
+                            Reaberto por {dia.reaberto_por_nome ?? "Admin"} em {formatDateTimeLabel(dia.reaberto_at)} ·{" "}
+                            {dia.reabertura_justificacao}
+                          </small>
+                        ) : null}
                       </div>
                       <div className="row-actions">
-                        <button
-                          className="icon-text-button"
-                          type="button"
-                          onClick={() => void handleCloseDia(dia)}
-                          disabled={dia.fechado}
-                        >
-                          <X size={18} aria-hidden="true" />
-                          Fechar
-                        </button>
+                        {dia.fechado ? (
+                          <button
+                            className="icon-text-button"
+                            type="button"
+                            onClick={() => void handleReopenDia(dia)}
+                            disabled={!canManageUsers}
+                            title={canManageUsers ? "Reabrir dia" : "Apenas administradores"}
+                          >
+                            <RefreshCw size={18} aria-hidden="true" />
+                            Reabrir
+                          </button>
+                        ) : (
+                          <button
+                            className="icon-text-button"
+                            type="button"
+                            onClick={() => void handleCloseDia(dia)}
+                          >
+                            <X size={18} aria-hidden="true" />
+                            Fechar
+                          </button>
+                        )}
                         <button
                           className="icon-button danger"
                           type="button"

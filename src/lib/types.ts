@@ -36,6 +36,10 @@ export type DiaFesta = {
   fechado_por_id: string | null;
   fechado_por_nome: string | null;
   fechado_at: string | null;
+  reaberto_por_id: string | null;
+  reaberto_por_nome: string | null;
+  reaberto_at: string | null;
+  reabertura_justificacao: string | null;
   criado_por_id: string | null;
   criado_por_nome: string | null;
   atualizado_por_id: string | null;
@@ -375,6 +379,10 @@ export type Database = {
           fechado_por_id?: string | null;
           fechado_por_nome?: string | null;
           fechado_at?: string | null;
+          reaberto_por_id?: string | null;
+          reaberto_por_nome?: string | null;
+          reaberto_at?: string | null;
+          reabertura_justificacao?: string | null;
           criado_por_id?: string | null;
           criado_por_nome?: string | null;
           atualizado_por_id?: string | null;
@@ -786,6 +794,10 @@ export type Database = {
       };
       app_fechar_dia: {
         Args: { p_token: string; p_id: string };
+        Returns: DiaFesta[];
+      };
+      app_reabrir_dia: {
+        Args: { p_token: string; p_id: string; p_justificacao: string };
         Returns: DiaFesta[];
       };
       app_listar_dias: {

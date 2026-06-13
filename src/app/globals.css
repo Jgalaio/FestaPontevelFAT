@@ -1052,6 +1052,13 @@ input:disabled {
   gap: 3px;
 }
 
+.dia-row small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
 .user-form {
   grid-template-columns: 1fr 1fr;
 }
