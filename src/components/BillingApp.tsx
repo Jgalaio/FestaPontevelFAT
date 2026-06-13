@@ -7,6 +7,8 @@ import {
   Beer,
   Building2,
   CalendarDays,
+  Database as DatabaseIcon,
+  Download,
   Euro,
   FileText,
   HandCoins,
@@ -23,6 +25,7 @@ import {
   Settings,
   Tags,
   Trash2,
+  Upload,
   Users,
   X
 } from "lucide-react";
@@ -33,6 +36,7 @@ import type {
   Anotacao,
   AppConfig,
   AppSession,
+  Json,
   Despesa,
   DespesaForm,
   DespesaRow,
@@ -73,6 +77,13 @@ type DemoStore = {
   inventarioTipos: InventarioTipoProduto[];
   inventarioProdutos: InventarioProduto[];
   anotacoes: Anotacao[];
+};
+
+type DatabaseBackup = {
+  app: "FestaSoft";
+  version: 1;
+  exported_at: string;
+  data: DemoStore;
 };
 
 type EntryTab = "faturacao" | "despesas";
@@ -1077,7 +1088,7 @@ function readDemoStore(): DemoStore {
     const parsed = JSON.parse(raw) as Partial<DemoStore>;
     const registos = parsed.registos ?? [];
     const despesas = (parsed.despesas ?? []).map(normalizeDespesaRow);
-    const diasFesta = parsed.diasFesta?.length
+    const diasFesta = Array.isArray(parsed.diasFesta)
       ? sortDiasFesta(parsed.diasFesta.map(normalizeDiaFesta))
       : buildDemoDias(registos, despesas);
 
@@ -1125,6 +1136,80 @@ function readDemoStore(): DemoStore {
 
 function writeDemoStore(store: DemoStore) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+}
+
+function makeDatabaseBackup(store: DemoStore): DatabaseBackup {
+  return {
+    app: "FestaSoft",
+    version: 1,
+    exported_at: new Date().toISOString(),
+    data: store
+  };
+}
+
+function downloadJsonFile(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function databaseStoreFromBackup(backup: unknown): DemoStore {
+  const wrapper = backup as { data?: Partial<DemoStore> };
+  const candidate = wrapper?.data && typeof wrapper.data === "object" ? wrapper.data : backup;
+  const data = candidate && typeof candidate === "object" ? (candidate as Partial<DemoStore>) : {};
+
+  return {
+    appConfig: normalizeAppConfig(data.appConfig),
+    agenteConfig: normalizeAgenteConfig(data.agenteConfig),
+    novadisConfig: normalizeNovadisConfig(data.novadisConfig),
+    diasFesta: Array.isArray(data.diasFesta) ? sortDiasFesta(data.diasFesta.map(normalizeDiaFesta)) : [],
+    postos: Array.isArray(data.postos) ? data.postos : [],
+    registos: Array.isArray(data.registos) ? data.registos : [],
+    despesas: Array.isArray(data.despesas) ? data.despesas.map(normalizeDespesaRow) : [],
+    pagamentosAgente: Array.isArray(data.pagamentosAgente) ? data.pagamentosAgente : [],
+    novadisBarris: Array.isArray(data.novadisBarris) ? data.novadisBarris.map(normalizeNovadisBarril) : [],
+    novadisConsumos: Array.isArray(data.novadisConsumos) ? data.novadisConsumos.map(normalizeNovadisConsumo) : [],
+    tabaqueiraEntradas: Array.isArray(data.tabaqueiraEntradas)
+      ? data.tabaqueiraEntradas.map(normalizeTabaqueiraEntrada)
+      : [],
+    tabaqueiraSaidas: Array.isArray(data.tabaqueiraSaidas) ? data.tabaqueiraSaidas.map(normalizeTabaqueiraSaida) : [],
+    inventarioTipos: Array.isArray(data.inventarioTipos)
+      ? data.inventarioTipos.map(normalizeInventarioTipo)
+      : [],
+    inventarioProdutos: Array.isArray(data.inventarioProdutos)
+      ? data.inventarioProdutos.map(normalizeInventarioProduto)
+      : [],
+    anotacoes: Array.isArray(data.anotacoes) ? data.anotacoes.map(normalizeAnotacao) : [],
+    tiposDespesa: Array.isArray(data.tiposDespesa) ? data.tiposDespesa : []
+  };
+}
+
+function emptyOperationalStore(currentStore: DemoStore): DemoStore {
+  return {
+    appConfig: normalizeAppConfig(currentStore.appConfig),
+    agenteConfig: normalizeAgenteConfig(baseAgenteConfig),
+    novadisConfig: normalizeNovadisConfig(baseNovadisConfig),
+    diasFesta: [],
+    postos: [],
+    registos: [],
+    despesas: [],
+    pagamentosAgente: [],
+    novadisBarris: [],
+    novadisConsumos: [],
+    tabaqueiraEntradas: [],
+    tabaqueiraSaidas: [],
+    inventarioTipos: [],
+    inventarioProdutos: [],
+    anotacoes: [],
+    tiposDespesa: []
+  };
 }
 
 function readDemoOperator() {
@@ -1309,6 +1394,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [saving, setSaving] = useState(false);
   const [inlineRegistoSaving, setInlineRegistoSaving] = useState(false);
   const [faviconSaving, setFaviconSaving] = useState(false);
+  const [databaseActionSaving, setDatabaseActionSaving] = useState(false);
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [postoSaving, setPostoSaving] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
@@ -4862,6 +4948,200 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     });
   }
 
+  async function refreshAfterDatabaseAction() {
+    setEditingRegisto(null);
+    setEditingDespesa(null);
+    setEditingNovadisConsumoTipo(null);
+    setForm((current) => ({ ...emptyForm(current.data), postoId: current.postoId }));
+    setDespesaForm((current) => ({ ...emptyDespesaForm(current.data), postoId: current.postoId }));
+    setPagamentoAgenteForm(emptyPagamentoAgenteForm());
+    setNovadisBarrilForm(emptyNovadisBarrilForm());
+    setNovadisConsumoForm(emptyNovadisConsumoForm(selectedDate));
+    setTabaqueiraEntradaForm(emptyTabaqueiraEntradaForm());
+    setTabaqueiraSaidaForm(emptyTabaqueiraSaidaForm(selectedDate));
+    setInventarioProdutoForm(emptyInventarioProdutoForm());
+    setInventarioRetiradaForm(emptyInventarioRetiradaForm());
+    setInventarioTipoForm(emptyInventarioTipoForm());
+    setNotaForm(emptyNotaForm());
+    setPostoForm(emptyPostoForm());
+    setTipoDespesaForm(emptyTipoDespesaForm());
+    setDiaForm(emptyDiaForm(selectedDate || startDate));
+
+    await loadAppConfig();
+    await loadData();
+    await loadAgentData();
+    await loadNovadisData();
+    await loadTabaqueiraData();
+    await loadInventarioData();
+    await loadNotas();
+
+    if (canManageUsers) {
+      await loadUsers();
+    }
+  }
+
+  async function handleExportDatabase() {
+    setError("");
+    setNotice("");
+
+    if (!canManageUsers) {
+      setError("Apenas administradores podem exportar a base de dados.");
+      return;
+    }
+
+    setDatabaseActionSaving(true);
+
+    if (isDemoMode) {
+      downloadJsonFile(makeDatabaseBackup(readDemoStore()), `festasoft-backup-${todayISO()}.json`);
+      setDatabaseActionSaving(false);
+      setNotice("Exportação criada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setDatabaseActionSaving(false);
+      return;
+    }
+
+    const { data, error: exportError } = await supabase.rpc("app_exportar_base_dados", {
+      p_token: sessionToken
+    });
+
+    setDatabaseActionSaving(false);
+
+    if (exportError || !data) {
+      setError(exportError?.message ?? "Não foi possível exportar a base de dados.");
+      return;
+    }
+
+    downloadJsonFile(data, `festasoft-backup-${todayISO()}.json`);
+    setNotice("Exportação criada.");
+  }
+
+  async function handleResetDatabase() {
+    setError("");
+    setNotice("");
+
+    if (!canManageUsers) {
+      setError("Apenas administradores podem fazer reset à base de dados.");
+      return;
+    }
+
+    const warningAccepted = window.confirm(
+      "ATENÇÃO: esta ação elimina todos os dados operacionais da festa: dias, postos, tipos, faturação, despesas, stocks, inventário, notas e pagamentos. Os utilizadores e sessões não são eliminados. Queres continuar?"
+    );
+
+    if (!warningAccepted) {
+      return;
+    }
+
+    const typedConfirmation = window.prompt('Para confirmar o reset, escreve "RESET"');
+
+    if (typedConfirmation !== "RESET") {
+      setError("Reset cancelado. A confirmação não corresponde a RESET.");
+      return;
+    }
+
+    setDatabaseActionSaving(true);
+
+    if (isDemoMode) {
+      writeDemoStore(emptyOperationalStore(readDemoStore()));
+      await refreshAfterDatabaseAction();
+      setDatabaseActionSaving(false);
+      setNotice("Base de dados reiniciada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setDatabaseActionSaving(false);
+      return;
+    }
+
+    const { error: resetError } = await supabase.rpc("app_reset_base_dados", {
+      p_token: sessionToken
+    });
+
+    if (resetError) {
+      setDatabaseActionSaving(false);
+      setError(resetError.message);
+      return;
+    }
+
+    await refreshAfterDatabaseAction();
+    setDatabaseActionSaving(false);
+    setNotice("Base de dados reiniciada.");
+  }
+
+  async function handleImportDatabaseFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (!canManageUsers) {
+      setError("Apenas administradores podem importar a base de dados.");
+      input.value = "";
+      return;
+    }
+
+    const warningAccepted = window.confirm(
+      "ATENÇÃO: a importação substitui todos os dados operacionais atuais pelo conteúdo do ficheiro. Os utilizadores e sessões não são importados nem eliminados. Queres continuar?"
+    );
+
+    if (!warningAccepted) {
+      input.value = "";
+      return;
+    }
+
+    try {
+      const backup = JSON.parse(await file.text()) as Json;
+
+      setDatabaseActionSaving(true);
+
+      if (isDemoMode) {
+        const nextStore = databaseStoreFromBackup(backup);
+
+        writeDemoStore(nextStore);
+        setAppConfig(nextStore.appConfig);
+        applyDocumentFavicon(nextStore.appConfig.favicon_data_url);
+        await refreshAfterDatabaseAction();
+        setDatabaseActionSaving(false);
+        setNotice("Importação concluída.");
+        return;
+      }
+
+      if (!supabase || !sessionToken) {
+        setDatabaseActionSaving(false);
+        return;
+      }
+
+      const { error: importError } = await supabase.rpc("app_importar_base_dados", {
+        p_token: sessionToken,
+        p_backup: backup
+      });
+
+      if (importError) {
+        setDatabaseActionSaving(false);
+        setError(importError.message);
+        return;
+      }
+
+      await refreshAfterDatabaseAction();
+      setDatabaseActionSaving(false);
+      setNotice("Importação concluída.");
+    } catch (importError) {
+      setDatabaseActionSaving(false);
+      setError(importError instanceof Error ? importError.message : "Não foi possível importar o ficheiro.");
+    } finally {
+      input.value = "";
+    }
+  }
+
   async function handleSaveFavicon(faviconDataUrl: string | null) {
     setError("");
     setNotice("");
@@ -8018,6 +8298,54 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     >
                       <X size={18} aria-hidden="true" />
                       Repor padrão
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="admin-card database-admin-card">
+                <div className="admin-card-main">
+                  <div className="heading-icon">
+                    <DatabaseIcon size={20} aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="eyebrow">Base de dados</p>
+                    <h3>Tratamento dos dados</h3>
+                    <span>
+                      Exporta, importa ou elimina os dados operacionais. Utilizadores e sessões ficam protegidos.
+                    </span>
+                  </div>
+                </div>
+
+                {canManageUsers ? (
+                  <div className="database-actions">
+                    <button
+                      className="icon-text-button"
+                      type="button"
+                      onClick={() => void handleExportDatabase()}
+                      disabled={databaseActionSaving}
+                    >
+                      <Download size={18} aria-hidden="true" />
+                      Exportar
+                    </button>
+                    <label className="icon-text-button file-button">
+                      <Upload size={18} aria-hidden="true" />
+                      Importar
+                      <input
+                        type="file"
+                        accept="application/json,.json"
+                        onChange={(event) => void handleImportDatabaseFileChange(event)}
+                        disabled={databaseActionSaving}
+                      />
+                    </label>
+                    <button
+                      className="icon-text-button danger-action"
+                      type="button"
+                      onClick={() => void handleResetDatabase()}
+                      disabled={databaseActionSaving}
+                    >
+                      <Trash2 size={18} aria-hidden="true" />
+                      Reset
                     </button>
                   </div>
                 ) : null}

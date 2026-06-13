@@ -1,3 +1,5 @@
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
 export type Posto = {
   id: string;
   nome: string;
@@ -696,6 +698,10 @@ export type Database = {
         Args: { p_token: string; p_id: string };
         Returns: null;
       };
+      app_exportar_base_dados: {
+        Args: { p_token: string };
+        Returns: Json;
+      };
       app_obter_config_publica: {
         Args: Record<string, never>;
         Returns: AppConfig[];
@@ -768,6 +774,13 @@ export type Database = {
         };
         Returns: AppConfig[];
       };
+      app_importar_base_dados: {
+        Args: {
+          p_token: string;
+          p_backup: Json;
+        };
+        Returns: null;
+      };
       app_guardar_utilizador: {
         Args: {
           p_token: string;
@@ -833,6 +846,10 @@ export type Database = {
       app_registar_pagamento_agente: {
         Args: { p_token: string; p_valor: number };
         Returns: PagamentoAgente[];
+      };
+      app_reset_base_dados: {
+        Args: { p_token: string };
+        Returns: null;
       };
       app_obter_novadis_config: {
         Args: { p_token: string };

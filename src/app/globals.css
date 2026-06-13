@@ -876,10 +876,24 @@ input:disabled {
   object-fit: contain;
 }
 
-.favicon-actions {
+.favicon-actions,
+.database-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.database-admin-card {
+  margin-top: 10px;
+}
+
+.danger-action {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.danger-action:hover {
+  background: rgba(255, 218, 218, 0.96);
 }
 
 .file-button {
@@ -1461,12 +1475,14 @@ td:first-child > span,
   }
 
   .admin-card,
-  .favicon-actions {
+  .favicon-actions,
+  .database-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
   .favicon-actions .icon-text-button,
+  .database-actions .icon-text-button,
   .file-button {
     width: 100%;
   }
