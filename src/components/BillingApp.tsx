@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import {
   Beer,
@@ -53,6 +53,7 @@ import type {
   NovadisConfig,
   NovadisConsumo,
   NovadisTipo,
+  OrcamentoLinha,
   PagamentoAgente,
   TabaqueiraEntrada,
   TabaqueiraSaida,
@@ -77,6 +78,7 @@ type DemoStore = {
   inventarioTipos: InventarioTipoProduto[];
   inventarioProdutos: InventarioProduto[];
   anotacoes: Anotacao[];
+  orcamentoLinhas: OrcamentoLinha[];
 };
 
 type DatabaseBackup = {
@@ -90,7 +92,16 @@ type EntryTab = "faturacao" | "despesas";
 type SideTab = "admin" | "agente" | "dias" | "postos" | "tipos";
 type StockTab = "novadis" | "tabaqueira" | "inventario";
 type InventarioTab = "consulta" | "tipos";
-type BillingAppMode = "agent" | "notes" | "novadis" | "stocks" | "overview" | "register" | "management" | "reports";
+type BillingAppMode =
+  | "agent"
+  | "budget"
+  | "notes"
+  | "novadis"
+  | "stocks"
+  | "overview"
+  | "register"
+  | "management"
+  | "reports";
 type TipoPagamentoDespesa = "dinheiro" | "transferencia";
 
 type BillingAppProps = {
@@ -199,6 +210,13 @@ type NotaForm = {
   id: string | null;
   titulo: string;
   texto: string;
+};
+
+type OrcamentoForm = {
+  id: string | null;
+  tipo: string;
+  designacao: string;
+  valor: string;
 };
 
 type InlineRegistoForm = {
@@ -737,12 +755,25 @@ function emptyNotaForm(): NotaForm {
   };
 }
 
+function emptyOrcamentoForm(): OrcamentoForm {
+  return {
+    id: null,
+    tipo: "",
+    designacao: "",
+    valor: ""
+  };
+}
+
 function normalizeTabaqueiraMarca(value: string | null | undefined) {
   return (value ?? "").trim().replace(/\s+/g, " ");
 }
 
 function normalizeInventoryText(value: string | null | undefined) {
   return (value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function normalizeBudgetText(value: string | null | undefined) {
+  return normalizeInventoryText(value).toUpperCase();
 }
 
 function normalizeNovadisTipo(value: string | null | undefined): NovadisTipo {
@@ -852,6 +883,20 @@ function normalizeAnotacao(anotacao: Anotacao): Anotacao {
     atualizado_por_id: anotacao.atualizado_por_id ?? null,
     atualizado_por_nome: anotacao.atualizado_por_nome ?? null,
     updated_at: anotacao.updated_at ?? anotacao.created_at
+  };
+}
+
+function normalizeOrcamentoLinha(linha: OrcamentoLinha): OrcamentoLinha {
+  return {
+    ...linha,
+    tipo: normalizeBudgetText(linha.tipo),
+    designacao: normalizeInventoryText(linha.designacao),
+    valor: Number(linha.valor ?? 0),
+    criado_por_id: linha.criado_por_id ?? null,
+    criado_por_nome: linha.criado_por_nome ?? "Sistema",
+    atualizado_por_id: linha.atualizado_por_id ?? null,
+    atualizado_por_nome: linha.atualizado_por_nome ?? null,
+    updated_at: linha.updated_at ?? linha.created_at
   };
 }
 
@@ -1057,6 +1102,7 @@ function readDemoStore(): DemoStore {
       inventarioTipos: baseInventarioTipos,
       inventarioProdutos: [],
       anotacoes: [],
+      orcamentoLinhas: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -1080,6 +1126,7 @@ function readDemoStore(): DemoStore {
       inventarioTipos: baseInventarioTipos,
       inventarioProdutos: [],
       anotacoes: [],
+      orcamentoLinhas: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -1110,6 +1157,7 @@ function readDemoStore(): DemoStore {
         : baseInventarioTipos,
       inventarioProdutos: (parsed.inventarioProdutos ?? []).map(normalizeInventarioProduto),
       anotacoes: (parsed.anotacoes ?? []).map(normalizeAnotacao),
+      orcamentoLinhas: (parsed.orcamentoLinhas ?? []).map(normalizeOrcamentoLinha),
       tiposDespesa: parsed.tiposDespesa?.length ? parsed.tiposDespesa : baseTiposDespesa
     };
   } catch {
@@ -1129,6 +1177,7 @@ function readDemoStore(): DemoStore {
       inventarioTipos: baseInventarioTipos,
       inventarioProdutos: [],
       anotacoes: [],
+      orcamentoLinhas: [],
       tiposDespesa: baseTiposDespesa
     };
   }
@@ -1187,6 +1236,9 @@ function databaseStoreFromBackup(backup: unknown): DemoStore {
       ? data.inventarioProdutos.map(normalizeInventarioProduto)
       : [],
     anotacoes: Array.isArray(data.anotacoes) ? data.anotacoes.map(normalizeAnotacao) : [],
+    orcamentoLinhas: Array.isArray(data.orcamentoLinhas)
+      ? data.orcamentoLinhas.map(normalizeOrcamentoLinha)
+      : [],
     tiposDespesa: Array.isArray(data.tiposDespesa) ? data.tiposDespesa : []
   };
 }
@@ -1208,6 +1260,7 @@ function emptyOperationalStore(currentStore: DemoStore): DemoStore {
     inventarioTipos: [],
     inventarioProdutos: [],
     anotacoes: [],
+    orcamentoLinhas: [],
     tiposDespesa: []
   };
 }
@@ -1322,6 +1375,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const isReportsMode = mode === "reports";
   const isAgentMode = mode === "agent";
   const isNotesMode = mode === "notes";
+  const isBudgetMode = mode === "budget";
   const isStocksMode = mode === "stocks" || mode === "novadis";
   const startDate = useMemo(() => todayISO(), []);
 
@@ -1353,6 +1407,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [inventarioTipos, setInventarioTipos] = useState<InventarioTipoProduto[]>(baseInventarioTipos);
   const [inventarioProdutos, setInventarioProdutos] = useState<InventarioProduto[]>([]);
   const [anotacoes, setAnotacoes] = useState<Anotacao[]>([]);
+  const [orcamentoLinhas, setOrcamentoLinhas] = useState<OrcamentoLinha[]>([]);
   const [agenteConfigForm, setAgenteConfigForm] = useState<AgenteConfigForm>(() =>
     agenteConfigToForm(baseAgenteConfig)
   );
@@ -1380,6 +1435,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   );
   const [inventarioTipoForm, setInventarioTipoForm] = useState<InventarioTipoForm>(() => emptyInventarioTipoForm());
   const [notaForm, setNotaForm] = useState<NotaForm>(() => emptyNotaForm());
+  const [orcamentoForm, setOrcamentoForm] = useState<OrcamentoForm>(() => emptyOrcamentoForm());
   const [userForm, setUserForm] = useState<UserForm>(() => emptyUserForm());
   const [postoForm, setPostoForm] = useState<PostoForm>(() => emptyPostoForm());
   const [tipoDespesaForm, setTipoDespesaForm] = useState<TipoDespesaForm>(() => emptyTipoDespesaForm());
@@ -1410,6 +1466,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [inventarioRetiradaSaving, setInventarioRetiradaSaving] = useState(false);
   const [inventarioTipoSaving, setInventarioTipoSaving] = useState(false);
   const [notaSaving, setNotaSaving] = useState(false);
+  const [orcamentoSaving, setOrcamentoSaving] = useState(false);
   const [overviewOnlyFestaTotal, setOverviewOnlyFestaTotal] = useState(false);
   const [overviewOnlyFestaSaldo, setOverviewOnlyFestaSaldo] = useState(false);
   const [notice, setNotice] = useState("");
@@ -1828,12 +1885,39 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     [anotacoes]
   );
   const topAnotacoes = orderedAnotacoes.slice(0, 5);
+  const orderedOrcamentoLinhas = useMemo(
+    () =>
+      orcamentoLinhas
+        .slice()
+        .map(normalizeOrcamentoLinha)
+        .sort((a, b) => a.tipo.localeCompare(b.tipo) || a.created_at.localeCompare(b.created_at)),
+    [orcamentoLinhas]
+  );
+  const orcamentoPorTipo = useMemo(() => {
+    const grupos = new Map<string, OrcamentoLinha[]>();
+
+    for (const linha of orderedOrcamentoLinhas) {
+      const tipo = linha.tipo || "SEM TIPO";
+      grupos.set(tipo, [...(grupos.get(tipo) ?? []), linha]);
+    }
+
+    return Array.from(grupos.entries()).map(([tipo, linhas]) => ({
+      tipo,
+      linhas,
+      total: linhas.reduce((acc, linha) => acc + Number(linha.valor), 0)
+    }));
+  }, [orderedOrcamentoLinhas]);
+  const orcamentoTotal = orderedOrcamentoLinhas.reduce((acc, linha) => acc + Number(linha.valor), 0);
+  const orcamentoMaiorGrupo = orcamentoPorTipo
+    .slice()
+    .sort((a, b) => b.total - a.total)[0];
 
   const currentUserName = appSession?.nome ?? demoOperator;
   const sessionToken = appSession?.token ?? "";
   const isLoggedIn = isDemoMode || Boolean(appSession);
   const canManageUsers = isDemoMode || appSession?.role === "admin";
   const canDeleteData = isDemoMode || appSession?.role === "admin";
+  const isEditingOrcamento = Boolean(orcamentoForm.id);
 
   const loadAppConfig = useCallback(async () => {
     if (isDemoMode) {
@@ -2093,6 +2177,31 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setAnotacoes((data ?? []).map(normalizeAnotacao));
   }, [isDemoMode, sessionToken, supabase]);
 
+  const loadOrcamento = useCallback(async () => {
+    if (isDemoMode) {
+      const store = readDemoStore();
+
+      setOrcamentoLinhas((store.orcamentoLinhas ?? []).map(normalizeOrcamentoLinha));
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      setOrcamentoLinhas([]);
+      return;
+    }
+
+    const { data, error: orcamentoError } = await supabase.rpc("app_listar_orcamento", {
+      p_token: sessionToken
+    });
+
+    if (orcamentoError) {
+      setError(orcamentoError.message);
+      return;
+    }
+
+    setOrcamentoLinhas((data ?? []).map(normalizeOrcamentoLinha));
+  }, [isDemoMode, sessionToken, supabase]);
+
   const loadData = useCallback(async () => {
     setError("");
 
@@ -2325,6 +2434,12 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }, [isLoggedIn, loadNotas]);
 
   useEffect(() => {
+    if (isLoggedIn && isBudgetMode) {
+      void loadOrcamento();
+    }
+  }, [isBudgetMode, isLoggedIn, loadOrcamento]);
+
+  useEffect(() => {
     if (!isNotesMode || typeof window === "undefined") {
       return;
     }
@@ -2531,6 +2646,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setInventarioTipoForm(emptyInventarioTipoForm());
     setAnotacoes([]);
     setNotaForm(emptyNotaForm());
+    setOrcamentoLinhas([]);
+    setOrcamentoForm(emptyOrcamentoForm());
     setNotesOpen(false);
     setInlineRegistoForm(emptyInlineRegistoForm());
   }
@@ -4868,6 +4985,153 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     await loadNotas();
   }
 
+  function handleCancelEditOrcamento() {
+    setOrcamentoForm(emptyOrcamentoForm());
+  }
+
+  function handleEditOrcamentoLinha(linha: OrcamentoLinha) {
+    const normalizedLinha = normalizeOrcamentoLinha(linha);
+
+    setError("");
+    setNotice("");
+    setOrcamentoForm({
+      id: normalizedLinha.id,
+      tipo: normalizedLinha.tipo,
+      designacao: normalizedLinha.designacao,
+      valor: String(Number(normalizedLinha.valor))
+    });
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("orcamento-form-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  async function handleSaveOrcamentoLinha(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const tipo = normalizeBudgetText(orcamentoForm.tipo);
+    const designacao = normalizeInventoryText(orcamentoForm.designacao);
+    const valor = parseMoney(orcamentoForm.valor);
+    const editingId = orcamentoForm.id;
+
+    if (!tipo) {
+      setError("Indica o tipo ou zona do orçamento.");
+      return;
+    }
+
+    if (!designacao) {
+      setError("Indica a designação da linha.");
+      return;
+    }
+
+    if (valor < 0) {
+      setError("O valor do orçamento não pode ser negativo.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const existingIndex = editingId
+        ? (store.orcamentoLinhas ?? []).findIndex((linha) => linha.id === editingId)
+        : -1;
+      const existingLinha = existingIndex >= 0 ? normalizeOrcamentoLinha(store.orcamentoLinhas[existingIndex]) : null;
+      const now = new Date().toISOString();
+      const nextLinha: OrcamentoLinha = {
+        id: existingLinha?.id ?? makeId("orcamento"),
+        tipo,
+        designacao,
+        valor,
+        criado_por_id: existingLinha?.criado_por_id ?? null,
+        criado_por_nome: existingLinha?.criado_por_nome ?? currentUserName,
+        atualizado_por_id: editingId ? null : existingLinha?.atualizado_por_id ?? null,
+        atualizado_por_nome: editingId ? currentUserName : existingLinha?.atualizado_por_nome ?? null,
+        created_at: existingLinha?.created_at ?? now,
+        updated_at: now
+      };
+      const nextLinhas =
+        existingIndex >= 0
+          ? store.orcamentoLinhas.map((linha, index) => (index === existingIndex ? nextLinha : linha))
+          : [...(store.orcamentoLinhas ?? []), nextLinha];
+
+      writeDemoStore({ ...store, orcamentoLinhas: nextLinhas });
+      setOrcamentoLinhas(nextLinhas.map(normalizeOrcamentoLinha));
+      setOrcamentoForm(emptyOrcamentoForm());
+      setNotice(editingId ? "Linha de orçamento alterada." : "Linha de orçamento adicionada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setOrcamentoSaving(true);
+
+    const { error: saveError } = await supabase.rpc("app_guardar_orcamento_linha", {
+      p_token: sessionToken,
+      p_id: editingId,
+      p_tipo: tipo,
+      p_designacao: designacao,
+      p_valor: valor
+    });
+
+    setOrcamentoSaving(false);
+
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+
+    setOrcamentoForm(emptyOrcamentoForm());
+    setNotice(editingId ? "Linha de orçamento alterada." : "Linha de orçamento adicionada.");
+    await loadOrcamento();
+  }
+
+  async function handleDeleteOrcamentoLinha(id: string) {
+    const shouldDelete = window.confirm("Apagar esta linha do orçamento?");
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextLinhas = (store.orcamentoLinhas ?? []).filter((linha) => linha.id !== id);
+
+      writeDemoStore({ ...store, orcamentoLinhas: nextLinhas });
+      setOrcamentoLinhas(nextLinhas.map(normalizeOrcamentoLinha));
+      if (orcamentoForm.id === id) {
+        setOrcamentoForm(emptyOrcamentoForm());
+      }
+      setNotice("Linha de orçamento apagada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_orcamento_linha", {
+      p_token: sessionToken,
+      p_id: id
+    });
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    if (orcamentoForm.id === id) {
+      setOrcamentoForm(emptyOrcamentoForm());
+    }
+    setNotice("Linha de orçamento apagada.");
+    await loadOrcamento();
+  }
+
   async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -4963,6 +5227,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setInventarioRetiradaForm(emptyInventarioRetiradaForm());
     setInventarioTipoForm(emptyInventarioTipoForm());
     setNotaForm(emptyNotaForm());
+    setOrcamentoForm(emptyOrcamentoForm());
     setPostoForm(emptyPostoForm());
     setTipoDespesaForm(emptyTipoDespesaForm());
     setDiaForm(emptyDiaForm(selectedDate || startDate));
@@ -4974,6 +5239,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     await loadTabaqueiraData();
     await loadInventarioData();
     await loadNotas();
+    await loadOrcamento();
 
     if (canManageUsers) {
       await loadUsers();
@@ -5288,9 +5554,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                     ? "Pag.Agente"
                     : isNotesMode
                       ? "Anotações"
-                    : isStocksMode
-                      ? "Stocks"
-                      : "Gestão"}
+                      : isBudgetMode
+                        ? "Orçamento"
+                        : isStocksMode
+                          ? "Stocks"
+                          : "Gestão"}
           </h1>
         </div>
 
@@ -5352,6 +5620,15 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </div>
             ) : null}
           </div>
+
+          <Link
+            className={`notes-trigger top-budget-link ${isBudgetMode ? "active" : ""}`}
+            href="/orcamento"
+            onClick={() => setNotesOpen(false)}
+          >
+            <FileText size={18} aria-hidden="true" />
+            <span>Orçamento</span>
+          </Link>
 
           {isRegisterMode || isReportsMode ? (
             <label className="date-control">
@@ -5508,6 +5785,188 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </div>
             ) : (
               <div className="empty-state compact">Ainda não existem anotações.</div>
+            )}
+          </section>
+        </>
+      ) : null}
+
+      {isBudgetMode ? (
+        <>
+          <section className="summary-grid" aria-label="Resumo do orçamento">
+            <article className="metric metric-total">
+              <span>Total orçamento</span>
+              <strong>{formatCurrency(orcamentoTotal)}</strong>
+              <small>{orderedOrcamentoLinhas.length} linhas registadas</small>
+            </article>
+            <article className="metric metric-total">
+              <span>Zonas</span>
+              <strong>{orcamentoPorTipo.length}</strong>
+              <small>Tipos de orçamento</small>
+            </article>
+            <article className="metric metric-total">
+              <span>Maior zona</span>
+              <strong>{orcamentoMaiorGrupo ? formatCurrency(orcamentoMaiorGrupo.total) : formatCurrency(0)}</strong>
+              <small>{orcamentoMaiorGrupo?.tipo ?? "Sem orçamento"}</small>
+            </article>
+          </section>
+
+          <section className="panel" id="orcamento-form-panel">
+            <div className="panel-heading table-heading">
+              <div className="panel-heading-inline">
+                <div className="heading-icon">
+                  <Euro size={20} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="eyebrow">Orçamento</p>
+                  <h2>{isEditingOrcamento ? "Editar linha" : "Inserir orçamento"}</h2>
+                </div>
+              </div>
+              {isEditingOrcamento ? (
+                <button className="icon-text-button" type="button" onClick={handleCancelEditOrcamento}>
+                  <X size={18} aria-hidden="true" />
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
+
+            <form className="form-grid budget-form" onSubmit={handleSaveOrcamentoLinha}>
+              <label>
+                Tipo
+                <input
+                  type="text"
+                  value={orcamentoForm.tipo}
+                  onChange={(event) => setOrcamentoForm((current) => ({ ...current, tipo: event.target.value }))}
+                  placeholder="Ex.: RESTAURAÇÃO"
+                  list="orcamento-tipos"
+                  required
+                  disabled={orcamentoSaving}
+                />
+              </label>
+              <datalist id="orcamento-tipos">
+                {orcamentoPorTipo.map((grupo) => (
+                  <option key={grupo.tipo} value={grupo.tipo} />
+                ))}
+              </datalist>
+
+              <label>
+                Designação
+                <input
+                  type="text"
+                  value={orcamentoForm.designacao}
+                  onChange={(event) =>
+                    setOrcamentoForm((current) => ({ ...current, designacao: event.target.value }))
+                  }
+                  placeholder="Ex.: Cozinheiras"
+                  required
+                  disabled={orcamentoSaving}
+                />
+              </label>
+
+              <label>
+                Orçamento
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={orcamentoForm.valor}
+                  onChange={(event) => setOrcamentoForm((current) => ({ ...current, valor: event.target.value }))}
+                  placeholder="0,00"
+                  disabled={orcamentoSaving}
+                />
+              </label>
+
+              <div className="form-actions budget-form-actions">
+                <button className="primary-button" type="submit" disabled={orcamentoSaving}>
+                  <Save size={18} aria-hidden="true" />
+                  {orcamentoSaving ? "A guardar" : isEditingOrcamento ? "Guardar" : "Adicionar"}
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading table-heading">
+              <div>
+                <p className="eyebrow">Orçamento</p>
+                <h2>Resumo por zona</h2>
+              </div>
+            </div>
+
+            {orcamentoPorTipo.length ? (
+              <div className="table-wrap">
+                <table className="data-table budget-table">
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Designação</th>
+                      <th className="numeric-cell">Orçamento</th>
+                      <th className="numeric-cell">Total</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orcamentoPorTipo.map((grupo) => (
+                      <Fragment key={grupo.tipo}>
+                        {grupo.linhas.map((linha, lineIndex) => (
+                          <tr id={`orcamento-${linha.id}`} key={linha.id}>
+                            {lineIndex === 0 ? (
+                              <td className="budget-type-cell" rowSpan={grupo.linhas.length + 1}>
+                                {grupo.tipo}
+                              </td>
+                            ) : null}
+                            <td>
+                              <strong>{linha.designacao}</strong>
+                              <span>
+                                {formatDateTimeLabel(linha.updated_at)} ·{" "}
+                                {linha.atualizado_por_nome ?? linha.criado_por_nome ?? "Sistema"}
+                              </span>
+                            </td>
+                            <td className="numeric-cell">{formatCurrency(linha.valor)}</td>
+                            <td className="numeric-cell" />
+                            <td>
+                              <div className="row-actions">
+                                <button
+                                  className="icon-button"
+                                  type="button"
+                                  aria-label="Editar linha do orçamento"
+                                  onClick={() => handleEditOrcamentoLinha(linha)}
+                                >
+                                  <Pencil size={16} aria-hidden="true" />
+                                </button>
+                                <button
+                                  className="icon-button danger"
+                                  type="button"
+                                  aria-label="Apagar linha do orçamento"
+                                  onClick={() => void handleDeleteOrcamentoLinha(linha.id)}
+                                >
+                                  <Trash2 size={16} aria-hidden="true" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="budget-subtotal-row">
+                          <td className="budget-subtotal-label" colSpan={2}>
+                            sub-total
+                          </td>
+                          <td className="numeric-cell">
+                            <strong>{formatCurrency(grupo.total)}</strong>
+                          </td>
+                          <td />
+                        </tr>
+                      </Fragment>
+                    ))}
+                    <tr className="budget-total-row">
+                      <td colSpan={3}>TOTAL CUSTOS FESTA</td>
+                      <td className="numeric-cell">{formatCurrency(orcamentoTotal)}</td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state compact">Ainda não existem linhas de orçamento.</div>
             )}
           </section>
         </>
@@ -7540,7 +7999,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         </section>
       ) : null}
 
-      {!isOverviewMode && !isReportsMode && !isAgentMode && !isNotesMode && !isStocksMode ? (
+      {!isOverviewMode && !isReportsMode && !isAgentMode && !isNotesMode && !isBudgetMode && !isStocksMode ? (
         <div className={`workspace-grid ${isManagementMode ? "management-workspace" : "home-workspace"}`}>
           {isRegisterMode ? (
             <section className="panel entry-panel" id="entry-panel">

@@ -19,6 +19,19 @@ insert into public.app_config (id)
 values (true)
 on conflict (id) do nothing;
 
+create table if not exists public.orcamento_linhas (
+  id uuid primary key default gen_random_uuid(),
+  tipo text not null,
+  designacao text not null,
+  valor numeric not null default 0 check (valor >= 0),
+  criado_por_id uuid references public.utilizadores(id) on delete set null,
+  criado_por_nome text,
+  atualizado_por_id uuid references public.utilizadores(id) on delete set null,
+  atualizado_por_nome text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.app_config enable row level security;
 
 create or replace function public.app_admin_actor(p_token text)
@@ -77,7 +90,8 @@ begin
       'tabaqueiraSaidas', coalesce((select jsonb_agg(to_jsonb(s) order by s.data asc, s.created_at asc) from public.tabaqueira_saidas s), '[]'::jsonb),
       'inventarioTipos', coalesce((select jsonb_agg(to_jsonb(t) order by t.nome asc) from public.inventario_tipos_produto t), '[]'::jsonb),
       'inventarioProdutos', coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at asc) from public.inventario_produtos p), '[]'::jsonb),
-      'anotacoes', coalesce((select jsonb_agg(to_jsonb(a) order by a.updated_at desc) from public.anotacoes a), '[]'::jsonb)
+      'anotacoes', coalesce((select jsonb_agg(to_jsonb(a) order by a.updated_at desc) from public.anotacoes a), '[]'::jsonb),
+      'orcamentoLinhas', coalesce((select jsonb_agg(to_jsonb(o) order by o.tipo asc, o.created_at asc) from public.orcamento_linhas o), '[]'::jsonb)
     )
   );
 end;
@@ -97,6 +111,7 @@ begin
   delete from public.registos_faturacao_auditoria;
   delete from public.despesas_posto_auditoria;
   delete from public.anotacoes;
+  delete from public.orcamento_linhas;
   delete from public.inventario_produtos;
   delete from public.inventario_tipos_produto;
   delete from public.tabaqueira_saidas;
@@ -303,6 +318,9 @@ begin
 
   insert into public.tipos_despesa
   select * from jsonb_populate_recordset(null::public.tipos_despesa, coalesce(payload -> 'tiposDespesa', '[]'::jsonb));
+
+  insert into public.orcamento_linhas
+  select * from jsonb_populate_recordset(null::public.orcamento_linhas, coalesce(payload -> 'orcamentoLinhas', '[]'::jsonb));
 
   insert into public.dias_festa
   select * from jsonb_populate_recordset(null::public.dias_festa, coalesce(payload -> 'diasFesta', '[]'::jsonb));

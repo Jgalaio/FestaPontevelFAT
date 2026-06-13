@@ -232,6 +232,19 @@ export type Anotacao = {
   updated_at: string;
 };
 
+export type OrcamentoLinha = {
+  id: string;
+  tipo: string;
+  designacao: string;
+  valor: number;
+  criado_por_id: string | null;
+  criado_por_nome: string | null;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuditoriaRegisto = {
   id: string;
   registo_id: string | null;
@@ -647,6 +660,23 @@ export type Database = {
         Update: Partial<Anotacao>;
         Relationships: [];
       };
+      orcamento_linhas: {
+        Row: OrcamentoLinha;
+        Insert: {
+          id?: string;
+          tipo: string;
+          designacao: string;
+          valor?: number;
+          criado_por_id?: string | null;
+          criado_por_nome?: string | null;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<OrcamentoLinha>;
+        Relationships: [];
+      };
       registos_faturacao_auditoria: {
         Row: AuditoriaRegisto;
         Insert: {
@@ -989,6 +1019,24 @@ export type Database = {
         Returns: Anotacao[];
       };
       app_apagar_anotacao: {
+        Args: { p_token: string; p_id: string };
+        Returns: null;
+      };
+      app_listar_orcamento: {
+        Args: { p_token: string };
+        Returns: OrcamentoLinha[];
+      };
+      app_guardar_orcamento_linha: {
+        Args: {
+          p_token: string;
+          p_id?: string | null;
+          p_tipo: string;
+          p_designacao: string;
+          p_valor: number;
+        };
+        Returns: OrcamentoLinha[];
+      };
+      app_apagar_orcamento_linha: {
         Args: { p_token: string; p_id: string };
         Returns: null;
       };
