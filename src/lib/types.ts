@@ -788,6 +788,7 @@ export type Database = {
       app_guardar_registo: {
         Args: {
           p_token: string;
+          p_id?: string | null;
           p_posto_id: string;
           p_data: string;
           p_dinheiro: number;

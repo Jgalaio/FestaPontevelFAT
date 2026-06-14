@@ -1636,11 +1636,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           registos.find((registo) => registo.posto_id === postoId)?.postos ??
           despesas.find((despesa) => despesa.posto_id === postoId)?.postos ??
           null;
-        const registo = registos.find((item) => item.posto_id === postoId) ?? null;
+        const postoRegistos = registos.filter((item) => item.posto_id === postoId);
         const postoDespesas = despesas.filter((despesa) => despesa.posto_id === postoId);
-        const dinheiro = Number(registo?.dinheiro ?? 0);
-        const multibanco = Number(registo?.multibanco ?? 0);
-        const mbway = Number(registo?.mbway ?? 0);
+        const dinheiro = postoRegistos.reduce((acc, registo) => acc + Number(registo.dinheiro), 0);
+        const multibanco = postoRegistos.reduce((acc, registo) => acc + Number(registo.multibanco), 0);
+        const mbway = postoRegistos.reduce((acc, registo) => acc + Number(registo.mbway), 0);
         const faturacao = dinheiro + multibanco + mbway;
         const despesasTotal = postoDespesas.reduce((acc, despesa) => acc + Number(despesa.valor), 0);
 
@@ -3230,15 +3230,6 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       return;
     }
 
-    const existingRegistoForForm =
-      registos.find((registo) => registo.posto_id === form.postoId && registo.data === selectedDia.data) ?? null;
-
-    if (existingRegistoForForm) {
-      setSaving(false);
-      setError("Este posto já tem faturação neste dia. Usa o botão editar para guardar alterações.");
-      return;
-    }
-
     const descricaoAlteracao = form.observacoes.trim();
 
     const payload = {
@@ -3252,26 +3243,18 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     if (isDemoMode) {
       const store = readDemoStore();
-      const existingIndex = store.registos.findIndex(
-        (registo) => registo.posto_id === payload.posto_id && registo.data === payload.data
-      );
-      const existingRegisto = existingIndex >= 0 ? store.registos[existingIndex] : null;
       const now = new Date().toISOString();
       const nextRegisto: RegistoRow = {
-        id: existingRegisto?.id ?? makeId("registo"),
-        created_at: existingRegisto?.created_at ?? now,
+        id: makeId("registo"),
+        created_at: now,
         updated_at: now,
-        criado_por_id: existingRegisto?.criado_por_id ?? null,
-        criado_por_nome: existingRegisto?.criado_por_nome ?? currentUserName,
+        criado_por_id: null,
+        criado_por_nome: currentUserName,
         atualizado_por_id: null,
         atualizado_por_nome: currentUserName,
         ...payload
       };
-
-      const nextRegistos =
-        existingIndex >= 0
-          ? store.registos.map((registo, index) => (index === existingIndex ? nextRegisto : registo))
-          : [...store.registos, nextRegisto];
+      const nextRegistos = [...store.registos, nextRegisto];
 
       writeDemoStore({ ...store, registos: nextRegistos });
       setNotice("Registo guardado.");
@@ -3288,6 +3271,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     const { error: saveError } = await supabase.rpc("app_guardar_registo", {
       p_token: sessionToken,
+      p_id: null,
       p_posto_id: payload.posto_id,
       p_data: payload.data,
       p_dinheiro: payload.dinheiro,
@@ -3374,6 +3358,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     const { error: saveError } = await supabase.rpc("app_guardar_registo", {
       p_token: sessionToken,
+      p_id: registo.id,
       p_posto_id: payload.posto_id,
       p_data: payload.data,
       p_dinheiro: payload.dinheiro,

@@ -360,7 +360,8 @@ create or replace function public.app_guardar_registo(
   p_dinheiro numeric,
   p_multibanco numeric,
   p_mbway numeric,
-  p_observacoes text default null
+  p_observacoes text default null,
+  p_id uuid default null
 )
 returns uuid
 language plpgsql
@@ -376,25 +377,30 @@ declare
 begin
   select * into actor from public.app_require_actor(p_token) limit 1;
 
-  select *
-  into existing_registo
-  from public.registos_faturacao r
-  where r.posto_id = p_posto_id
-    and r.data = p_data
-  limit 1;
+  if p_id is not null then
+    select *
+    into existing_registo
+    from public.registos_faturacao r
+    where r.id = p_id
+    for update;
 
-  if found then
+    if existing_registo.id is null then
+      raise exception 'Registo de faturação não encontrado' using errcode = '02000';
+    end if;
+
     old_data := to_jsonb(existing_registo);
 
     update public.registos_faturacao
-    set dinheiro = p_dinheiro,
+    set posto_id = p_posto_id,
+        data = p_data,
+        dinheiro = p_dinheiro,
         multibanco = p_multibanco,
         mbway = p_mbway,
         observacoes = nullif(trim(coalesce(p_observacoes, '')), ''),
         atualizado_por_id = actor.utilizador_id,
         atualizado_por_nome = actor.nome,
         updated_at = now()
-    where id = existing_registo.id
+    where id = p_id
     returning registos_faturacao.id, to_jsonb(registos_faturacao)
     into saved_id, new_data;
 
