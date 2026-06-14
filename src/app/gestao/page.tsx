@@ -1,5 +1,5 @@
-import { BillingApp } from "@/components/BillingApp";
+import { ManagementBillingPage } from "@/components/BillingPages";
 
 export default function GestaoPage() {
-  return <BillingApp key="management" mode="management" />;
+  return <ManagementBillingPage />;
 }

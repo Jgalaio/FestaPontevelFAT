@@ -5624,6 +5624,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
           <Link
             className={`notes-trigger top-budget-link ${isBudgetMode ? "active" : ""}`}
             href="/orcamento"
+            prefetch={false}
             onClick={() => setNotesOpen(false)}
           >
             <FileText size={18} aria-hidden="true" />
@@ -5658,27 +5659,27 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       </header>
 
       <nav className="app-nav" aria-label="Navegação principal">
-        <Link className={`app-nav-link ${isOverviewMode ? "active" : ""}`} href="/">
+        <Link className={`app-nav-link ${isOverviewMode ? "active" : ""}`} href="/" prefetch={false}>
           <Home size={18} aria-hidden="true" />
           Overview
         </Link>
-        <Link className={`app-nav-link ${isRegisterMode ? "active" : ""}`} href="/registo">
+        <Link className={`app-nav-link ${isRegisterMode ? "active" : ""}`} href="/registo" prefetch={false}>
           <Euro size={18} aria-hidden="true" />
           Registo
         </Link>
-        <Link className={`app-nav-link ${isReportsMode ? "active" : ""}`} href="/relatorios">
+        <Link className={`app-nav-link ${isReportsMode ? "active" : ""}`} href="/relatorios" prefetch={false}>
           <FileText size={18} aria-hidden="true" />
           Relatórios
         </Link>
-        <Link className={`app-nav-link ${isAgentMode ? "active" : ""}`} href="/pag-agente">
+        <Link className={`app-nav-link ${isAgentMode ? "active" : ""}`} href="/pag-agente" prefetch={false}>
           <HandCoins size={18} aria-hidden="true" />
           Pag.Agente
         </Link>
-        <Link className={`app-nav-link ${isStocksMode ? "active" : ""}`} href="/stocks">
+        <Link className={`app-nav-link ${isStocksMode ? "active" : ""}`} href="/stocks" prefetch={false}>
           <Tags size={18} aria-hidden="true" />
           Stocks
         </Link>
-        <Link className={`app-nav-link ${isManagementMode ? "active" : ""}`} href="/gestao">
+        <Link className={`app-nav-link ${isManagementMode ? "active" : ""}`} href="/gestao" prefetch={false}>
           <Settings size={18} aria-hidden="true" />
           Gestão
         </Link>
@@ -6098,7 +6099,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <p className="eyebrow">Overview</p>
               <h2>Todos os dias</h2>
             </div>
-            <Link className="icon-text-button" href="/registo">
+            <Link className="icon-text-button" href="/registo" prefetch={false}>
               <Euro size={18} aria-hidden="true" />
               Registar
             </Link>

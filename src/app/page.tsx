@@ -1,5 +1,5 @@
-import { BillingApp } from "@/components/BillingApp";
+import { OverviewBillingPage } from "@/components/BillingPages";
 
 export default function Home() {
-  return <BillingApp key="overview" mode="overview" />;
+  return <OverviewBillingPage />;
 }

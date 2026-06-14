@@ -1,5 +1,5 @@
-import { BillingApp } from "@/components/BillingApp";
+import { BudgetBillingPage } from "@/components/BillingPages";
 
 export default function OrcamentoPage() {
-  return <BillingApp key="budget" mode="budget" />;
+  return <BudgetBillingPage />;
 }

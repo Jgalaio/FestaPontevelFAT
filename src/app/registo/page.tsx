@@ -1,5 +1,5 @@
-import { BillingApp } from "@/components/BillingApp";
+import { RegisterBillingPage } from "@/components/BillingPages";
 
 export default function RegistoPage() {
-  return <BillingApp key="register" mode="register" />;
+  return <RegisterBillingPage />;
 }

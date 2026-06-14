@@ -1,5 +1,5 @@
-import { BillingApp } from "@/components/BillingApp";
+import { StocksBillingPage } from "@/components/BillingPages";
 
 export default function StocksPage() {
-  return <BillingApp key="stocks" mode="stocks" />;
+  return <StocksBillingPage />;
 }

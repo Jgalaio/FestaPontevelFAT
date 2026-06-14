@@ -1,5 +1,5 @@
-import { BillingApp } from "@/components/BillingApp";
+import { NotesBillingPage } from "@/components/BillingPages";
 
 export default function AnotacoesPage() {
-  return <BillingApp key="notes" mode="notes" />;
+  return <NotesBillingPage />;
 }
