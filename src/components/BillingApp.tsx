@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent, MouseEvent } from "react";
 import {
@@ -1493,6 +1492,35 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     },
     []
   );
+  const handleNoteLinkClick = useCallback((href: string, event: MouseEvent<HTMLAnchorElement>, nota?: Anotacao) => {
+    if (
+      event.defaultPrevented ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    window.history.pushState(null, "", href);
+    setActiveMode("notes");
+    setNotesOpen(false);
+
+    if (nota) {
+      setNotaForm({
+        id: nota.id,
+        titulo: nota.titulo,
+        texto: nota.texto
+      });
+    } else {
+      setNotaForm(emptyNotaForm());
+    }
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -5623,29 +5651,36 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <div className="notes-dropdown">
                 <div className="notes-dropdown-heading">
                   <strong>Anotações</strong>
-                  <Link className="icon-text-button table-action" href="/anotacoes#nova" onClick={() => setNotesOpen(false)}>
+                  <a
+                    className="icon-text-button table-action"
+                    href="/anotacoes#nova"
+                    onClick={(event) => handleNoteLinkClick("/anotacoes#nova", event)}
+                  >
                     <Plus size={16} aria-hidden="true" />
                     Adicionar
-                  </Link>
+                  </a>
                 </div>
 
                 {topAnotacoes.length ? (
                   <div className="notes-preview-list">
                     {topAnotacoes.map((nota) => (
                       <div className="notes-preview-item" key={nota.id}>
-                        <Link href={`/anotacoes#nota-${nota.id}`} onClick={() => setNotesOpen(false)}>
+                        <a
+                          href={`/anotacoes#nota-${nota.id}`}
+                          onClick={(event) => handleNoteLinkClick(`/anotacoes#nota-${nota.id}`, event, nota)}
+                        >
                           <strong>{nota.titulo}</strong>
                           <span>{nota.texto}</span>
-                        </Link>
+                        </a>
                         <div className="row-actions">
-                          <Link
+                          <a
                             className="icon-button"
                             href={`/anotacoes#nota-${nota.id}`}
                             aria-label="Editar anotação"
-                            onClick={() => setNotesOpen(false)}
+                            onClick={(event) => handleNoteLinkClick(`/anotacoes#nota-${nota.id}`, event, nota)}
                           >
                             <Pencil size={15} aria-hidden="true" />
-                          </Link>
+                          </a>
                           <button
                             className="icon-button danger"
                             type="button"
