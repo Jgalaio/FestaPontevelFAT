@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import {
@@ -233,6 +234,32 @@ type NovadisValorKey =
   | "co2_valor_unitario";
 type NovadisTaraKey = "imperial_valor_tara" | "cidra_valor_tara" | "sangria_valor_tara" | "co2_valor_tara";
 type NovadisConfigFormKey = keyof NovadisConfigForm;
+
+function billingModeFromPath(pathname: string | null): BillingAppMode | null {
+  const normalizedPath = pathname && pathname !== "/" ? pathname.replace(/\/$/, "") : "/";
+
+  switch (normalizedPath) {
+    case "/":
+      return "overview";
+    case "/registo":
+      return "register";
+    case "/relatorios":
+      return "reports";
+    case "/pag-agente":
+      return "agent";
+    case "/stocks":
+    case "/novadis":
+      return "stocks";
+    case "/anotacoes":
+      return "notes";
+    case "/orcamento":
+      return "budget";
+    case "/gestao":
+      return "management";
+    default:
+      return null;
+  }
+}
 
 const STORAGE_KEY = "pontevel-faturacao-mvp";
 const DEMO_OPERATOR_KEY = "pontevel-faturacao-operador";
@@ -1367,16 +1394,19 @@ function mapDespesaRpc(row: DespesaRpc): Despesa {
 }
 
 export function BillingApp({ mode = "overview" }: BillingAppProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const effectiveMode = billingModeFromPath(pathname) ?? mode;
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const isDemoMode = !hasSupabaseConfig || !supabase;
-  const isOverviewMode = mode === "overview";
-  const isRegisterMode = mode === "register";
-  const isManagementMode = mode === "management";
-  const isReportsMode = mode === "reports";
-  const isAgentMode = mode === "agent";
-  const isNotesMode = mode === "notes";
-  const isBudgetMode = mode === "budget";
-  const isStocksMode = mode === "stocks" || mode === "novadis";
+  const isOverviewMode = effectiveMode === "overview";
+  const isRegisterMode = effectiveMode === "register";
+  const isManagementMode = effectiveMode === "management";
+  const isReportsMode = effectiveMode === "reports";
+  const isAgentMode = effectiveMode === "agent";
+  const isNotesMode = effectiveMode === "notes";
+  const isBudgetMode = effectiveMode === "budget";
+  const isStocksMode = effectiveMode === "stocks" || effectiveMode === "novadis";
   const startDate = useMemo(() => todayISO(), []);
 
   const [appSession, setAppSession] = useState<AppSession | null>(null);
@@ -1445,6 +1475,13 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [stockTab, setStockTab] = useState<StockTab>("novadis");
   const [inventarioTab, setInventarioTab] = useState<InventarioTab>("consulta");
   const [notesOpen, setNotesOpen] = useState(false);
+  const handleNavigate = useCallback(
+    (href: string) => {
+      setNotesOpen(false);
+      router.push(href);
+    },
+    [router]
+  );
   const [demoOperator, setDemoOperator] = useState("Demonstração");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -5621,14 +5658,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             ) : null}
           </div>
 
-          <Link
+          <button
             className={`notes-trigger top-budget-link ${isBudgetMode ? "active" : ""}`}
-            href="/orcamento"
-            onClick={() => setNotesOpen(false)}
+            type="button"
+            onClick={() => handleNavigate("/orcamento")}
           >
             <FileText size={18} aria-hidden="true" />
             <span>Orçamento</span>
-          </Link>
+          </button>
 
           {isRegisterMode || isReportsMode ? (
             <label className="date-control">
@@ -5658,30 +5695,50 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       </header>
 
       <nav className="app-nav" aria-label="Navegação principal">
-        <Link className={`app-nav-link ${isOverviewMode ? "active" : ""}`} href="/">
+        <button className={`app-nav-link ${isOverviewMode ? "active" : ""}`} type="button" onClick={() => handleNavigate("/")}>
           <Home size={18} aria-hidden="true" />
           Overview
-        </Link>
-        <Link className={`app-nav-link ${isRegisterMode ? "active" : ""}`} href="/registo">
+        </button>
+        <button
+          className={`app-nav-link ${isRegisterMode ? "active" : ""}`}
+          type="button"
+          onClick={() => handleNavigate("/registo")}
+        >
           <Euro size={18} aria-hidden="true" />
           Registo
-        </Link>
-        <Link className={`app-nav-link ${isReportsMode ? "active" : ""}`} href="/relatorios">
+        </button>
+        <button
+          className={`app-nav-link ${isReportsMode ? "active" : ""}`}
+          type="button"
+          onClick={() => handleNavigate("/relatorios")}
+        >
           <FileText size={18} aria-hidden="true" />
           Relatórios
-        </Link>
-        <Link className={`app-nav-link ${isAgentMode ? "active" : ""}`} href="/pag-agente">
+        </button>
+        <button
+          className={`app-nav-link ${isAgentMode ? "active" : ""}`}
+          type="button"
+          onClick={() => handleNavigate("/pag-agente")}
+        >
           <HandCoins size={18} aria-hidden="true" />
           Pag.Agente
-        </Link>
-        <Link className={`app-nav-link ${isStocksMode ? "active" : ""}`} href="/stocks">
+        </button>
+        <button
+          className={`app-nav-link ${isStocksMode ? "active" : ""}`}
+          type="button"
+          onClick={() => handleNavigate("/stocks")}
+        >
           <Tags size={18} aria-hidden="true" />
           Stocks
-        </Link>
-        <Link className={`app-nav-link ${isManagementMode ? "active" : ""}`} href="/gestao">
+        </button>
+        <button
+          className={`app-nav-link ${isManagementMode ? "active" : ""}`}
+          type="button"
+          onClick={() => handleNavigate("/gestao")}
+        >
           <Settings size={18} aria-hidden="true" />
           Gestão
-        </Link>
+        </button>
       </nav>
 
       {isNotesMode ? (
@@ -6098,10 +6155,10 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <p className="eyebrow">Overview</p>
               <h2>Todos os dias</h2>
             </div>
-            <Link className="icon-text-button" href="/registo">
+            <button className="icon-text-button" type="button" onClick={() => handleNavigate("/registo")}>
               <Euro size={18} aria-hidden="true" />
               Registar
-            </Link>
+            </button>
           </div>
 
           {loading ? (
