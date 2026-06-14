@@ -1,5 +1,5 @@
 import { BillingApp } from "@/components/BillingApp";
 
 export default function PagAgentePage() {
-  return <BillingApp mode="agent" />;
+  return <BillingApp key="agent" mode="agent" />;
 }
