@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent, MouseEvent } from "react";
 import {
@@ -1394,9 +1393,8 @@ function mapDespesaRpc(row: DespesaRpc): Despesa {
 }
 
 export function BillingApp({ mode = "overview" }: BillingAppProps) {
-  const pathname = usePathname();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
-  const [activeMode, setActiveMode] = useState<BillingAppMode>(() => billingModeFromPath(pathname) ?? mode);
+  const [activeMode, setActiveMode] = useState<BillingAppMode>(mode);
   const isDemoMode = !hasSupabaseConfig || !supabase;
   const isOverviewMode = activeMode === "overview";
   const isRegisterMode = activeMode === "register";
@@ -1475,7 +1473,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [inventarioTab, setInventarioTab] = useState<InventarioTab>("consulta");
   const [notesOpen, setNotesOpen] = useState(false);
   const handlePageLinkClick = useCallback(
-    (nextMode: BillingAppMode, event: MouseEvent<HTMLAnchorElement>) => {
+    (nextMode: BillingAppMode, href: string, event: MouseEvent<HTMLAnchorElement>) => {
       if (
         event.defaultPrevented ||
         event.metaKey ||
@@ -1487,8 +1485,11 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
         return;
       }
 
+      event.preventDefault();
+      window.history.pushState(null, "", href);
       setActiveMode(nextMode);
       setNotesOpen(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     },
     []
   );
@@ -2441,8 +2442,15 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   }, [loadAppConfig]);
 
   useEffect(() => {
-    setActiveMode(billingModeFromPath(pathname) ?? mode);
-  }, [mode, pathname]);
+    function syncModeFromLocation() {
+      setActiveMode(billingModeFromPath(window.location.pathname) ?? mode);
+    }
+
+    syncModeFromLocation();
+    window.addEventListener("popstate", syncModeFromLocation);
+
+    return () => window.removeEventListener("popstate", syncModeFromLocation);
+  }, [mode]);
 
   useEffect(() => {
     applyDocumentFavicon(appConfig.favicon_data_url);
@@ -5672,15 +5680,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             ) : null}
           </div>
 
-          <Link
+          <a
             className={`notes-trigger top-budget-link ${isBudgetMode ? "active" : ""}`}
             href="/orcamento"
-            prefetch={false}
-            onClick={(event) => handlePageLinkClick("budget", event)}
+            onClick={(event) => handlePageLinkClick("budget", "/orcamento", event)}
           >
             <FileText size={18} aria-hidden="true" />
             <span>Orçamento</span>
-          </Link>
+          </a>
 
           {isRegisterMode || isReportsMode ? (
             <label className="date-control">
@@ -5710,60 +5717,54 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
       </header>
 
       <nav className="app-nav" aria-label="Navegação principal">
-        <Link
+        <a
           className={`app-nav-link ${isOverviewMode ? "active" : ""}`}
           href="/"
-          prefetch={false}
-          onClick={(event) => handlePageLinkClick("overview", event)}
+          onClick={(event) => handlePageLinkClick("overview", "/", event)}
         >
           <Home size={18} aria-hidden="true" />
           Overview
-        </Link>
-        <Link
+        </a>
+        <a
           className={`app-nav-link ${isRegisterMode ? "active" : ""}`}
           href="/registo"
-          prefetch={false}
-          onClick={(event) => handlePageLinkClick("register", event)}
+          onClick={(event) => handlePageLinkClick("register", "/registo", event)}
         >
           <Euro size={18} aria-hidden="true" />
           Registo
-        </Link>
-        <Link
+        </a>
+        <a
           className={`app-nav-link ${isReportsMode ? "active" : ""}`}
           href="/relatorios"
-          prefetch={false}
-          onClick={(event) => handlePageLinkClick("reports", event)}
+          onClick={(event) => handlePageLinkClick("reports", "/relatorios", event)}
         >
           <FileText size={18} aria-hidden="true" />
           Relatórios
-        </Link>
-        <Link
+        </a>
+        <a
           className={`app-nav-link ${isAgentMode ? "active" : ""}`}
           href="/pag-agente"
-          prefetch={false}
-          onClick={(event) => handlePageLinkClick("agent", event)}
+          onClick={(event) => handlePageLinkClick("agent", "/pag-agente", event)}
         >
           <HandCoins size={18} aria-hidden="true" />
           Pag.Agente
-        </Link>
-        <Link
+        </a>
+        <a
           className={`app-nav-link ${isStocksMode ? "active" : ""}`}
           href="/stocks"
-          prefetch={false}
-          onClick={(event) => handlePageLinkClick("stocks", event)}
+          onClick={(event) => handlePageLinkClick("stocks", "/stocks", event)}
         >
           <Tags size={18} aria-hidden="true" />
           Stocks
-        </Link>
-        <Link
+        </a>
+        <a
           className={`app-nav-link ${isManagementMode ? "active" : ""}`}
           href="/gestao"
-          prefetch={false}
-          onClick={(event) => handlePageLinkClick("management", event)}
+          onClick={(event) => handlePageLinkClick("management", "/gestao", event)}
         >
           <Settings size={18} aria-hidden="true" />
           Gestão
-        </Link>
+        </a>
       </nav>
 
       {isNotesMode ? (
@@ -6180,15 +6181,14 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               <p className="eyebrow">Overview</p>
               <h2>Todos os dias</h2>
             </div>
-            <Link
+            <a
               className="icon-text-button"
               href="/registo"
-              prefetch={false}
-              onClick={(event) => handlePageLinkClick("register", event)}
+              onClick={(event) => handlePageLinkClick("register", "/registo", event)}
             >
               <Euro size={18} aria-hidden="true" />
               Registar
-            </Link>
+            </a>
           </div>
 
           {loading ? (
