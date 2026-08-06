@@ -112,7 +112,11 @@ export type PagamentoAgente = {
   valor: number;
   entregue_por_id: string | null;
   entregue_por_nome: string;
+  atualizado_por_id: string | null;
+  atualizado_por_nome: string | null;
+  justificacao_alteracao: string | null;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type NovadisTipo = "imperial" | "cidra" | "sangria" | "co2";
@@ -490,9 +494,52 @@ export type Database = {
           valor: number;
           entregue_por_id?: string | null;
           entregue_por_nome: string;
+          atualizado_por_id?: string | null;
+          atualizado_por_nome?: string | null;
+          justificacao_alteracao?: string | null;
           created_at?: string;
+          updated_at?: string | null;
         };
         Update: Partial<PagamentoAgente>;
+        Relationships: [];
+      };
+      pagamentos_agente_auditoria: {
+        Row: {
+          id: string;
+          pagamento_id: string;
+          acao: "editado" | "apagado";
+          utilizador_id: string | null;
+          utilizador_nome: string;
+          utilizador_username: string | null;
+          justificacao: string;
+          dados_anteriores: Json | null;
+          dados_novos: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          pagamento_id: string;
+          acao: "editado" | "apagado";
+          utilizador_id?: string | null;
+          utilizador_nome: string;
+          utilizador_username?: string | null;
+          justificacao: string;
+          dados_anteriores?: Json | null;
+          dados_novos?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          pagamento_id?: string;
+          acao?: "editado" | "apagado";
+          utilizador_id?: string | null;
+          utilizador_nome?: string;
+          utilizador_username?: string | null;
+          justificacao?: string;
+          dados_anteriores?: Json | null;
+          dados_novos?: Json | null;
+          created_at?: string;
+        };
         Relationships: [];
       };
       novadis_config: {
@@ -877,6 +924,14 @@ export type Database = {
       app_registar_pagamento_agente: {
         Args: { p_token: string; p_valor: number };
         Returns: PagamentoAgente[];
+      };
+      app_editar_pagamento_agente: {
+        Args: { p_token: string; p_id: string; p_valor: number; p_justificacao: string };
+        Returns: PagamentoAgente[];
+      };
+      app_apagar_pagamento_agente: {
+        Args: { p_token: string; p_id: string; p_justificacao: string };
+        Returns: null;
       };
       app_reset_base_dados: {
         Args: { p_token: string };

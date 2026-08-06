@@ -142,7 +142,9 @@ type AgenteConfigForm = {
 };
 
 type PagamentoAgenteForm = {
+  id: string | null;
   valor: string;
+  justificacao: string;
 };
 
 type NovadisConfigForm = {
@@ -690,9 +692,24 @@ function agenteConfigToForm(config: AgenteConfig): AgenteConfigForm {
   };
 }
 
+function normalizePagamentoAgente(pagamento: PagamentoAgente): PagamentoAgente {
+  return {
+    ...pagamento,
+    valor: Number(pagamento.valor ?? 0),
+    entregue_por_id: pagamento.entregue_por_id ?? null,
+    entregue_por_nome: pagamento.entregue_por_nome ?? "Sistema",
+    atualizado_por_id: pagamento.atualizado_por_id ?? null,
+    atualizado_por_nome: pagamento.atualizado_por_nome ?? null,
+    justificacao_alteracao: pagamento.justificacao_alteracao ?? null,
+    updated_at: pagamento.updated_at ?? pagamento.created_at
+  };
+}
+
 function emptyPagamentoAgenteForm(): PagamentoAgenteForm {
   return {
-    valor: ""
+    id: null,
+    valor: "",
+    justificacao: ""
   };
 }
 
@@ -1172,7 +1189,7 @@ function readDemoStore(): DemoStore {
       postos: parsed.postos?.length ? parsed.postos : basePostos,
       registos,
       despesas,
-      pagamentosAgente: parsed.pagamentosAgente ?? [],
+      pagamentosAgente: (parsed.pagamentosAgente ?? []).map(normalizePagamentoAgente),
       novadisBarris: (parsed.novadisBarris ?? []).map(normalizeNovadisBarril),
       novadisConsumos: (parsed.novadisConsumos ?? []).map(normalizeNovadisConsumo),
       tabaqueiraEntradas: (parsed.tabaqueiraEntradas ?? []).map(normalizeTabaqueiraEntrada),
@@ -1247,7 +1264,9 @@ function databaseStoreFromBackup(backup: unknown): DemoStore {
     postos: Array.isArray(data.postos) ? data.postos : [],
     registos: Array.isArray(data.registos) ? data.registos : [],
     despesas: Array.isArray(data.despesas) ? data.despesas.map(normalizeDespesaRow) : [],
-    pagamentosAgente: Array.isArray(data.pagamentosAgente) ? data.pagamentosAgente : [],
+    pagamentosAgente: Array.isArray(data.pagamentosAgente)
+      ? data.pagamentosAgente.map(normalizePagamentoAgente)
+      : [],
     novadisBarris: Array.isArray(data.novadisBarris) ? data.novadisBarris.map(normalizeNovadisBarril) : [],
     novadisConsumos: Array.isArray(data.novadisConsumos) ? data.novadisConsumos.map(normalizeNovadisConsumo) : [],
     tabaqueiraEntradas: Array.isArray(data.tabaqueiraEntradas)
@@ -1440,6 +1459,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const [pagamentoAgenteForm, setPagamentoAgenteForm] = useState<PagamentoAgenteForm>(() =>
     emptyPagamentoAgenteForm()
   );
+  const [deletingPagamentoAgente, setDeletingPagamentoAgente] = useState<PagamentoAgente | null>(null);
+  const [pagamentoAgenteDeleteJustificacao, setPagamentoAgenteDeleteJustificacao] = useState("");
   const [novadisConfigForm, setNovadisConfigForm] = useState<NovadisConfigForm>(() =>
     novadisConfigToForm(baseNovadisConfig)
   );
@@ -1808,6 +1829,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
   const selectedSaldo = selectedTotals.total - selectedDespesasTotal;
   const isEditingRegisto = Boolean(editingRegisto);
   const isEditingDespesa = Boolean(editingDespesa);
+  const isEditingPagamentoAgente = Boolean(pagamentoAgenteForm.id);
   const isEditingTabaqueiraEntrada = Boolean(tabaqueiraEntradaForm.id);
   const isEditingTabaqueiraSaida = Boolean(tabaqueiraSaidaForm.id);
   const isEditingInventarioProduto = Boolean(inventarioProdutoForm.id);
@@ -2074,7 +2096,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
       setAgenteConfig(nextConfig);
       setAgenteConfigForm(agenteConfigToForm(nextConfig));
-      setPagamentosAgente(store.pagamentosAgente ?? []);
+      setPagamentosAgente((store.pagamentosAgente ?? []).map(normalizePagamentoAgente));
       return;
     }
 
@@ -2106,7 +2128,7 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setAgenteConfig(nextConfig);
     setAgenteConfigForm(agenteConfigToForm(nextConfig));
-    setPagamentosAgente(pagamentosResult.data ?? []);
+    setPagamentosAgente((pagamentosResult.data ?? []).map(normalizePagamentoAgente));
   }, [isDemoMode, sessionToken, supabase]);
 
   const loadNovadisData = useCallback(async () => {
@@ -2716,6 +2738,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setAgenteConfigForm(agenteConfigToForm(baseAgenteConfig));
     setPagamentosAgente([]);
     setPagamentoAgenteForm(emptyPagamentoAgenteForm());
+    setDeletingPagamentoAgente(null);
+    setPagamentoAgenteDeleteJustificacao("");
     setNovadisConfig(baseNovadisConfig);
     setNovadisConfigForm(novadisConfigToForm(baseNovadisConfig));
     setNovadisBarris([]);
@@ -3807,27 +3831,61 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     setNotice("");
 
     const valor = parseMoney(pagamentoAgenteForm.valor);
+    const editingId = pagamentoAgenteForm.id;
+    const justificacao = pagamentoAgenteForm.justificacao.trim();
 
     if (valor <= 0) {
       setError("Indica um valor entregue ao agente maior que zero.");
       return;
     }
 
+    if (editingId && !justificacao) {
+      setError("Indica a justificação da alteração antes de guardar.");
+      return;
+    }
+
     if (isDemoMode) {
       const store = readDemoStore();
-      const nextPagamento: PagamentoAgente = {
-        id: makeId("pagamento-agente"),
-        valor,
-        entregue_por_id: null,
-        entregue_por_nome: currentUserName,
-        created_at: new Date().toISOString()
-      };
-      const nextPagamentos = [nextPagamento, ...(store.pagamentosAgente ?? [])];
+      const currentPagamentos = (store.pagamentosAgente ?? []).map(normalizePagamentoAgente);
+      const existingIndex = editingId
+        ? currentPagamentos.findIndex((pagamento) => pagamento.id === editingId)
+        : -1;
+      const existingPagamento = existingIndex >= 0 ? currentPagamentos[existingIndex] : null;
+      const now = new Date().toISOString();
+
+      if (editingId && !existingPagamento) {
+        setError("Não foi possível encontrar esta entrega ao agente.");
+        return;
+      }
+
+      const nextPagamento: PagamentoAgente = existingPagamento
+        ? {
+            ...existingPagamento,
+            valor,
+            atualizado_por_id: null,
+            atualizado_por_nome: currentUserName,
+            justificacao_alteracao: justificacao,
+            updated_at: now
+          }
+        : {
+            id: makeId("pagamento-agente"),
+            valor,
+            entregue_por_id: null,
+            entregue_por_nome: currentUserName,
+            atualizado_por_id: null,
+            atualizado_por_nome: null,
+            justificacao_alteracao: null,
+            created_at: now,
+            updated_at: now
+          };
+      const nextPagamentos = existingPagamento
+        ? currentPagamentos.map((pagamento, index) => (index === existingIndex ? nextPagamento : pagamento))
+        : [nextPagamento, ...currentPagamentos];
 
       writeDemoStore({ ...store, pagamentosAgente: nextPagamentos });
       setPagamentosAgente(nextPagamentos);
       setPagamentoAgenteForm(emptyPagamentoAgenteForm());
-      setNotice("Entrega ao agente registada.");
+      setNotice(editingId ? "Entrega ao agente alterada." : "Entrega ao agente registada.");
       return;
     }
 
@@ -3837,10 +3895,17 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
 
     setPagamentoAgenteSaving(true);
 
-    const { error: saveError } = await supabase.rpc("app_registar_pagamento_agente", {
-      p_token: sessionToken,
-      p_valor: valor
-    });
+    const { error: saveError } = editingId
+      ? await supabase.rpc("app_editar_pagamento_agente", {
+          p_token: sessionToken,
+          p_id: editingId,
+          p_valor: valor,
+          p_justificacao: justificacao
+        })
+      : await supabase.rpc("app_registar_pagamento_agente", {
+          p_token: sessionToken,
+          p_valor: valor
+        });
 
     setPagamentoAgenteSaving(false);
 
@@ -3850,7 +3915,114 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
     }
 
     setPagamentoAgenteForm(emptyPagamentoAgenteForm());
-    setNotice("Entrega ao agente registada.");
+    setDeletingPagamentoAgente(null);
+    setPagamentoAgenteDeleteJustificacao("");
+    setNotice(editingId ? "Entrega ao agente alterada." : "Entrega ao agente registada.");
+    await loadAgentData();
+  }
+
+  function handleEditPagamentoAgente(pagamento: PagamentoAgente) {
+    setError("");
+    setNotice("");
+    setDeletingPagamentoAgente(null);
+    setPagamentoAgenteDeleteJustificacao("");
+    setPagamentoAgenteForm({
+      id: pagamento.id,
+      valor: String(Number(pagamento.valor).toFixed(2)),
+      justificacao: ""
+    });
+
+    window.setTimeout(() => {
+      document.getElementById("agent-payment-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
+
+  function handleCancelEditPagamentoAgente() {
+    setPagamentoAgenteForm(emptyPagamentoAgenteForm());
+    setError("");
+  }
+
+  function handleRequestDeletePagamentoAgente(pagamento: PagamentoAgente) {
+    setError("");
+    setNotice("");
+
+    if (!canDeleteData) {
+      setError("Não tem privilégios para apagar dados inseridos.");
+      return;
+    }
+
+    setDeletingPagamentoAgente(pagamento);
+    setPagamentoAgenteDeleteJustificacao("");
+    setPagamentoAgenteForm(emptyPagamentoAgenteForm());
+  }
+
+  function handleCancelDeletePagamentoAgente() {
+    setDeletingPagamentoAgente(null);
+    setPagamentoAgenteDeleteJustificacao("");
+    setError("");
+  }
+
+  async function handleDeletePagamentoAgente(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    if (!deletingPagamentoAgente) {
+      return;
+    }
+
+    const normalizedJustificacao = pagamentoAgenteDeleteJustificacao.trim();
+
+    if (!normalizedJustificacao) {
+      setError("Indica a justificação para apagar a entrega ao agente.");
+      return;
+    }
+
+    if (isDemoMode) {
+      const store = readDemoStore();
+      const nextPagamentos = (store.pagamentosAgente ?? [])
+        .map(normalizePagamentoAgente)
+        .filter((current) => current.id !== deletingPagamentoAgente.id);
+
+      writeDemoStore({ ...store, pagamentosAgente: nextPagamentos });
+      setPagamentosAgente(nextPagamentos);
+
+      if (pagamentoAgenteForm.id === deletingPagamentoAgente.id) {
+        setPagamentoAgenteForm(emptyPagamentoAgenteForm());
+      }
+
+      setDeletingPagamentoAgente(null);
+      setPagamentoAgenteDeleteJustificacao("");
+      setNotice("Entrega ao agente apagada.");
+      return;
+    }
+
+    if (!supabase || !sessionToken) {
+      return;
+    }
+
+    setPagamentoAgenteSaving(true);
+
+    const { error: deleteError } = await supabase.rpc("app_apagar_pagamento_agente", {
+      p_token: sessionToken,
+      p_id: deletingPagamentoAgente.id,
+      p_justificacao: normalizedJustificacao
+    });
+
+    setPagamentoAgenteSaving(false);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    if (pagamentoAgenteForm.id === deletingPagamentoAgente.id) {
+      setPagamentoAgenteForm(emptyPagamentoAgenteForm());
+    }
+
+    setDeletingPagamentoAgente(null);
+    setPagamentoAgenteDeleteJustificacao("");
+    setNotice("Entrega ao agente apagada.");
     await loadAgentData();
   }
 
@@ -6571,12 +6743,16 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
             </article>
           </section>
 
-          <section className="panel">
+          <section className="panel" id="agent-payment-panel">
             <div className="panel-heading table-heading">
               <div>
                 <p className="eyebrow">Pag.Agente</p>
-                <h2>Entrega de dinheiro ao agente</h2>
-                <span className="panel-subtitle">O registo guarda automaticamente dia, hora e utilizador.</span>
+                <h2>{isEditingPagamentoAgente ? "Editar entrega ao agente" : "Entrega de dinheiro ao agente"}</h2>
+                <span className="panel-subtitle">
+                  {isEditingPagamentoAgente
+                    ? "A data, hora e utilizador da entrega original serão preservados."
+                    : "O registo guarda automaticamente dia, hora e utilizador."}
+                </span>
               </div>
               <button
                 className="icon-text-button"
@@ -6592,7 +6768,23 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </button>
             </div>
 
-            <form className="agent-payment-form" onSubmit={handleRegisterPagamentoAgente}>
+            {isEditingPagamentoAgente ? (
+              <div className="edit-menu">
+                <div>
+                  <strong>A editar uma entrega ao agente</strong>
+                  <span>A justificação ficará associada à alteração.</span>
+                </div>
+                <button className="icon-text-button" type="button" onClick={handleCancelEditPagamentoAgente}>
+                  <X size={17} aria-hidden="true" />
+                  Cancelar
+                </button>
+              </div>
+            ) : null}
+
+            <form
+              className={`agent-payment-form ${isEditingPagamentoAgente ? "editing" : ""}`}
+              onSubmit={handleRegisterPagamentoAgente}
+            >
               <label>
                 Valor entregue ao agente
                 <input
@@ -6601,14 +6793,33 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                   step="0.01"
                   inputMode="decimal"
                   value={pagamentoAgenteForm.valor}
-                  onChange={(event) => setPagamentoAgenteForm({ valor: event.target.value })}
+                  onChange={(event) =>
+                    setPagamentoAgenteForm((current) => ({ ...current, valor: event.target.value }))
+                  }
                   placeholder="0,00"
                   required
                 />
               </label>
+              {isEditingPagamentoAgente ? (
+                <label>
+                  Justificação da alteração
+                  <input
+                    value={pagamentoAgenteForm.justificacao}
+                    onChange={(event) =>
+                      setPagamentoAgenteForm((current) => ({ ...current, justificacao: event.target.value }))
+                    }
+                    placeholder="Ex.: corrigido o valor entregue"
+                    required
+                  />
+                </label>
+              ) : null}
               <button className="primary-button" type="submit" disabled={pagamentoAgenteSaving}>
-                <HandCoins size={18} aria-hidden="true" />
-                {pagamentoAgenteSaving ? "A registar" : "Registar entrega"}
+                {isEditingPagamentoAgente ? <Save size={18} aria-hidden="true" /> : <HandCoins size={18} aria-hidden="true" />}
+                {pagamentoAgenteSaving
+                  ? "A guardar"
+                  : isEditingPagamentoAgente
+                    ? "Guardar alteração"
+                    : "Registar entrega"}
               </button>
             </form>
           </section>
@@ -6621,6 +6832,37 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
               </div>
             </div>
 
+            {deletingPagamentoAgente ? (
+              <form className="agent-delete-confirmation" onSubmit={handleDeletePagamentoAgente}>
+                <div>
+                  <strong>
+                    Apagar entrega de {formatCurrency(Number(deletingPagamentoAgente.valor))} ao agente
+                  </strong>
+                  <span>Esta ação fica registada na auditoria e não pode ser anulada.</span>
+                </div>
+                <label>
+                  Justificação obrigatória
+                  <input
+                    value={pagamentoAgenteDeleteJustificacao}
+                    onChange={(event) => setPagamentoAgenteDeleteJustificacao(event.target.value)}
+                    placeholder="Ex.: entrega registada em duplicado"
+                    autoFocus
+                    required
+                  />
+                </label>
+                <div className="row-actions">
+                  <button className="icon-text-button" type="button" onClick={handleCancelDeletePagamentoAgente}>
+                    <X size={17} aria-hidden="true" />
+                    Cancelar
+                  </button>
+                  <button className="icon-text-button danger-action" type="submit" disabled={pagamentoAgenteSaving}>
+                    <Trash2 size={17} aria-hidden="true" />
+                    {pagamentoAgenteSaving ? "A apagar" : "Apagar entrega"}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
             {pagamentosAgente.length ? (
               <div className="table-wrap">
                 <table className="agent-table">
@@ -6629,6 +6871,8 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                       <th>Dia e hora</th>
                       <th>Valor</th>
                       <th>Entregue por</th>
+                      <th>Última alteração</th>
+                      <th>Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -6639,6 +6883,41 @@ export function BillingApp({ mode = "overview" }: BillingAppProps) {
                           <strong>{formatCurrency(Number(pagamento.valor))}</strong>
                         </td>
                         <td>{pagamento.entregue_por_nome}</td>
+                        <td>
+                          {pagamento.atualizado_por_nome ? (
+                            <div className="audit-cell">
+                              <strong>{pagamento.atualizado_por_nome}</strong>
+                              <span>{formatDateTimeLabel(pagamento.updated_at ?? pagamento.created_at)}</span>
+                              <small>{pagamento.justificacao_alteracao}</small>
+                            </div>
+                          ) : (
+                            <span>Sem alterações</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              className="icon-button"
+                              type="button"
+                              aria-label="Editar entrega ao agente"
+                              title="Editar entrega"
+                              onClick={() => handleEditPagamentoAgente(pagamento)}
+                              disabled={pagamentoAgenteSaving}
+                            >
+                              <Pencil size={15} aria-hidden="true" />
+                            </button>
+                            <button
+                              className="icon-button danger"
+                              type="button"
+                              aria-label="Apagar entrega ao agente"
+                              title={canDeleteData ? "Apagar entrega" : "Apenas administradores"}
+                              onClick={() => handleRequestDeletePagamentoAgente(pagamento)}
+                              disabled={pagamentoAgenteSaving}
+                            >
+                              <Trash2 size={15} aria-hidden="true" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

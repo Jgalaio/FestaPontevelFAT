@@ -110,6 +110,7 @@ begin
 
   delete from public.registos_faturacao_auditoria;
   delete from public.despesas_posto_auditoria;
+  delete from public.pagamentos_agente_auditoria;
   delete from public.anotacoes;
   delete from public.orcamento_linhas;
   delete from public.inventario_produtos;
